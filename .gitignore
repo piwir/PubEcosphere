@@ -16,7 +16,7 @@ venv/
 
 # output
 *.log
-data/
+data/pubpeer.db
 output/
 docs/
 

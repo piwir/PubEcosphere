@@ -72,5 +72,10 @@ class ScoringConfig:
         "erratum", "withdraw", "withdrawn",
     )
 
+    # ---- 每期 picks：短名单选优后每类取几篇当周报素材 ----
+    picks_per_cat: int = 2          # 每类至多取 2 篇
+    small_cat_threshold: int = 5    # 候选 < 此值视为「比较少的小类」
+    small_cat_pick: int = 1         # 小类只取 1 篇
+
     # ---- v3 富集缓存 TTL（天） ----
     enrich_ttl_days: int = 2

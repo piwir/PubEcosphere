@@ -1,0 +1,8 @@
+# 爬虫本体为纯 Python 标准库实现（urllib/sqlite3/argparse），
+# 不需要任何第三方依赖 —— 此环境仅固定解释器版本，保证与本地一致。
+name: pubecosphere
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip

@@ -1,0 +1,24 @@
+# Windows
+*Zone.Identifier
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.idea/
+.vscode/
+*.env
+.env*
+
+# output
+*.log
+data/
+output/
+docs/
+
+# 隐私文档与素材（不推送）
+docs/PubEcosphere.md

@@ -18,7 +18,7 @@ from crawler.client import ClientConfig, PubPeerClient
 from crawler.store import Store as CrawlerStore
 
 from . import config as config_mod
-from . import enrich, report, revisit, score
+from . import enrich, issue, report, revisit, score
 from .cas import CasIndex, minor_name, minor_names
 from .ccf import CcfIndex
 from .jcr import JcrIndex
@@ -56,14 +56,9 @@ def _journal_info(cas_idx, jcr_idx, ccf_idx, capture: dict) -> dict:
 
 
 def _category_for(jinfo: dict, level: str) -> str:
-    """报告分类：level=minor 时用小类中文名（细分）。
-
-    跳过与大类相同/同前缀的小类（如「综合性期刊/综合」），避免大小类重复。
-    """
+    """报告分类：level=minor 时用小类中文名（细分），规则与 issue.category_for 一致。"""
     if level == "minor":
-        for name in minor_names(jinfo.get("minor") or ""):
-            if name and name != jinfo["major"] and not name.startswith(jinfo["major"]):
-                return name
+        return issue.category_for(jinfo.get("major") or "", jinfo.get("minor"))
     return jinfo["major"]
 
 
@@ -186,6 +181,13 @@ def cmd_rank(args) -> int:
     sstore = ScoringStore(args.db)
     cstore = CrawlerStore(args.db)
     captures = sstore.all_captures()
+    if not args.include_published:
+        pub_ids = sstore.published_ids()
+        if pub_ids:
+            before = len(captures)
+            captures = [c for c in captures if c["pubpeer_id"] not in pub_ids]
+            if args.verbose:
+                print(f"exclude published: {before} → {len(captures)}", flush=True)
     pubs = sstore.all_publications()
     pub_by_pid = {p["pubpeer_id"]: p for p in pubs}
     pub_doi_map = {pid: p.get("doi") for pid, p in pub_by_pid.items() if p.get("doi")}
@@ -298,6 +300,41 @@ def cmd_rank(args) -> int:
     return 0
 
 
+# ---- pick -----------------------------------------------------------------
+
+def cmd_pick(args) -> int:
+    cfg = config_mod.ScoringConfig()
+    if args.picks_per_cat is not None:
+        cfg.picks_per_cat = args.picks_per_cat
+    if args.small_cat_threshold is not None:
+        cfg.small_cat_threshold = args.small_cat_threshold
+    if args.small_cat_pick is not None:
+        cfg.small_cat_pick = args.small_cat_pick
+
+    sstore = ScoringStore(args.db)
+    run_id = args.run_id or sstore.latest_run_id()
+    if not run_id:
+        print("no run found — 先运行 rank", file=sys.stderr)
+        return 1
+
+    if args.dry_run:
+        rows, _ = issue._load_run(sstore, run_id)
+        picks, grouped = issue.select_picks(rows, sstore.published_ids(exclude_issue=args.issue), cfg)
+        print(f"dry-run: run={run_id}, picks {len(picks)} / {len(grouped)} 类", flush=True)
+        for cat in sorted(grouped, key=lambda c: -len(grouped[c])):
+            sel = [p for p in picks if p["category"] == cat]
+            if sel:
+                print(f"  {cat} ({len(grouped[cat])} 候选→取 {len(sel)}): "
+                      + ", ".join(p["pubpeer_id"] for p in sel), flush=True)
+        return 0
+
+    client = PubPeerClient(ClientConfig(delay=args.delay))
+    picks, issue_dir = issue.build_issue(sstore, client, run_id, args.issue, cfg, Path(args.output))
+    print(f"pick done: {len(picks)} articles, issue={args.issue}, run={run_id}", flush=True)
+    print(f"  → {issue_dir}", flush=True)
+    return 0
+
+
 # ---- CLI ---------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
@@ -329,9 +366,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
                    help="硬过滤 last_commented∈[now-D1,now-D2)（默认不过滤）")
     p.add_argument("--max-per-cat", type=int, default=5, help="每大类短名单上限")
+    p.add_argument("--include-published", action="store_true",
+                   help="把已发布（published 表）文章也纳入打分（默认排除）")
     p.add_argument("--refresh-enrich", action="store_true", help="强制刷新 DOI/v3 缓存")
     p.add_argument("--force-deep", action="store_true", help="无视已回访标记，强制深度回访")
     p.set_defaults(func=cmd_rank)
+
+    p = sub.add_parser("pick", parents=[common],
+                       help="每类选 picks，收集 md+图片到 output/issue/<issue>/，标记已发布")
+    p.add_argument("--issue", required=True, metavar="期号", help="期号标注（测试用 -1）")
+    p.add_argument("--run-id", default=None, help="打分 run 日期，默认取最新")
+    p.add_argument("--picks-per-cat", type=int, default=None, help="每类至多取几篇（默认 2）")
+    p.add_argument("--small-cat-threshold", type=int, default=None,
+                   help="候选少于多少视为小类（默认 5）")
+    p.add_argument("--small-cat-pick", type=int, default=None, help="小类取几篇（默认 1）")
+    p.add_argument("--dry-run", action="store_true", help="只打印将选的 picks，不写文件不标记")
+    p.set_defaults(func=cmd_pick)
 
     args = ap.parse_args(argv)
     return args.func(args)

@@ -55,6 +55,13 @@ CREATE TABLE IF NOT EXISTS shortlist (
     final_score     REAL,
     PRIMARY KEY (run_id, pubpeer_id)
 );
+CREATE TABLE IF NOT EXISTS published (
+    pubpeer_id      TEXT PRIMARY KEY,
+    issue           TEXT,            -- 期号标注（测试用 -1）
+    category        TEXT,
+    final_score     REAL,
+    picked_at       TEXT
+);
 """
 
 
@@ -195,6 +202,31 @@ class ScoringStore:
         cur = self.conn.execute(
             "SELECT * FROM scores WHERE run_id=? ORDER BY final_score DESC", (run_id,))
         return _rows(cur)
+
+    def latest_run_id(self) -> str | None:
+        cur = self.conn.execute("SELECT MAX(run_id) FROM shortlist")
+        return cur.fetchone()[0]
+
+    # ---- published（已发布标记，后面不再考虑使用） ------------------------
+
+    def published_ids(self, exclude_issue: str | None = None) -> set[str]:
+        """已发布文章 pubpeer_id 集合；exclude_issue 指定时排除该期（重跑同期不误伤）。"""
+        if exclude_issue is not None:
+            cur = self.conn.execute(
+                "SELECT pubpeer_id FROM published WHERE issue != ?", (exclude_issue,))
+        else:
+            cur = self.conn.execute("SELECT pubpeer_id FROM published")
+        return {r[0] for r in cur.fetchall()}
+
+    def mark_published(self, rows: list[dict]) -> None:
+        with self.tx() as c:
+            c.executemany(
+                """INSERT INTO published (pubpeer_id, issue, category, final_score, picked_at)
+                   VALUES (:pubpeer_id,:issue,:category,:final_score,:picked_at)
+                   ON CONFLICT(pubpeer_id) DO UPDATE SET
+                       issue=excluded.issue, category=excluded.category,
+                       final_score=excluded.final_score, picked_at=excluded.picked_at""",
+                rows)
 
     # ---- 爬虫表只读访问（不建表、不改动） ---------------------------------
 

@@ -1,8 +1,8 @@
 # PubEcosphere
 
-> 一个自动化爬取 PubPeer 平台文章，关注作者与学术打假人激烈交锋，生成周报的推送系统
+> 一个PubPeer周报生成项目
 
-基于 PubPeer(pubpeer.com) 公开评论数据，抓取存在**作者与打假人激烈交锋**的论文，通过多维度打分排序，由大模型生成微信服务号周报，经人工审核后推送。
+基于 PubPeer(pubpeer.com) 公开评论数据，抓取存在**作者与打假人激烈交锋**的论文，通过多维度打分排序，由大模型生成周报，经人工审核后推送。
 
 ## 项目简介
 
@@ -10,18 +10,17 @@
 
 - **自动化监控** PubPeer 上高关注度的论文评论动态
 - **智能打分** 筛选出值得报道的「激烈交锋」案例
-- **周报化** 由大模型润色成可读性强的公众号推文
-- **合规推送** 经人工审核后通过微信服务号发布
+- **周报化** 由大模型润色成可读性强的周报
+- **合规推送** 经人工审核后发布
 
 
 ## 核心工作流
 
-1. **服务号申请** — 完成微信服务号注册，获取推送通道
-2. **爬虫 + 结构化** — 爬取 PubPeer 文章评论数据，整理为 Markdown 结构化数据
-3. **打分体系** — 对候选文章多维度打分，筛选「激烈交锋」的高价值案例
-4. **图片处理** — 将多张截图/图片合成为一张，嵌入推文
-5. **大模型生成** — 接入大模型，识别冲突点并生成推文草稿
-6. **审核推送** — 人工审核后通过服务号群发
+1. **爬虫 + 结构化** — 爬取 PubPeer 文章评论数据，整理为 Markdown 结构化数据
+2. **打分体系** — 对候选文章多维度打分，筛选「激烈交锋」的高价值案例
+3. **图片处理** — 将多张截图/图片合成为一张，嵌入周报
+4. **大模型生成** — 接入大模型，识别冲突点并生成周报草稿
+
 
 ## 项目结构
 
@@ -36,7 +35,7 @@ PubEcosphere/
 │   ├── crawl.py        # 主入口：capture 捕获 feed + revisit 延迟回访评论
 │   ├── export.py       # 导出：回访数据整理为 md + 评论图片下载本地化
 ├── scoring/            # 打分系统：学科分类 + 两阶段打分选优 + 周报素材打包
-│   ├── pipeline.py     # CLI：coverage/ rank/ pick（
+│   ├── pipeline.py     # CLI：coverage/ rank/ pick
 │   ├── cas.py          # 中科院分区表 2025：大类/小类/分区/Top
 │   ├── jcr.py          # JCR 2025 影响因子
 │   ├── ccf.py          # CCF 推荐目录兜底 + 国际期刊预警名单
@@ -47,9 +46,9 @@ PubEcosphere/
 │   ├── issue.py        # 每类选 → 收集 md+图片到 output/issue/<期号>/ → 标记已发布
 │   ├── report.py       # 输出 JSON + Markdown 到 output/score/<日期>/
 │   └── config.py       # 权重/基线/打假人名单/分类粒度/每期篇数，全部可调
-├── data/               # 运行数据（含 gitignore 的 ShowJCR 分类/IF 数据）
+├── data/               # 运行数据
 ├── output/             # 生成的周报 Markdown + 打分报告
-├── environment.yml     # 服务器 conda 环境配置
+├── environment.yml     
 ├── README.md
 └── .gitignore
 ```
@@ -64,16 +63,13 @@ PubPeer 的公开接口 `/api/recent/from/{0..400}` 只能看到**最近约 3 �
 
 所有请求带浏览器 UA、限速 1.5s、对瞬时错误退避重试；捕获与评论均为幂等 upsert，可断点续跑。
 
-bash
-# 每日捕获（服务器 cron）：记录 feed 中的 pubpeer_id
-python -m crawler.crawl --db data/pubpeer.db capture
+1. 每日捕获（服务器 cron）：记录 feed 中的 pubpeer_id
+`python -m crawler.crawl --db data/pubpeer.db capture`
+2. 回访（>=7 天后）：抓捕获过的文章页，提取评论（--limit 可分批续跑）
+`python -m crawler.crawl --db data/pubpeer.db revisit --limit 50`
 
-# 回访（>=7 天后）：抓捕获过的文章页，提取评论（--limit 可分批续跑）
-python -m crawler.crawl --db data/pubpeer.db revisit --limit 50
-
-# 导出：每篇文章一个 md（output/pub/<pubpeer_id>.md），评论图片下载到 <pubpeer_id>_files/
-python -m crawler.export --db data/pubpeer.db --output output
-
+3. 导出：每篇文章一个 md（output/pub/<pubpeer_id>.md），评论图片下载到 <pubpeer_id>_files/
+`python -m crawler.export --db data/pubpeer.db --output output`
 
 
 ```
@@ -94,21 +90,18 @@ output/pub/
 
 按 HelloGitHub 模式，把捕获文章按**学科（中科院分区表大类/小类）**分组，每类挑出「激烈交锋」高分候选，供 AI 生成周报。
 
-```bash
-# ① 期刊覆盖率报告（分类/IF/CCF/预警的命中情况，不联网不评分）
-python -m scoring.pipeline coverage --db data/pubpeer.db
 
-# ② 两阶段打分选优：
-#    stage-1 全部用廉价数据（捕获 + CrossRef/v3 富集）粗筛
-#    stage-2 每类高分短名单深度回访，用真实评论算「激烈交互」
-python -m scoring.pipeline rank --db data/pubpeer.db --stage1-only   # 只粗筛（快）
-python -m scoring.pipeline rank --db data/pubpeer.db                 # 完整两阶段
+1. 期刊覆盖率报告（分类/IF/CCF/预警的命中情况，不联网不评分）
+`python -m scoring.pipeline coverage --db data/pubpeer.db`
 
-# ③ 每期素材打包：rank 之后按类别选篇（每类至多 2 篇，小类 1 篇），
-#    把文章的 md + 评论图片收到 output/issue/<期号>/，并在数据库标记已发布
-python -m scoring.pipeline pick --db data/pubpeer.db --issue=1 --dry-run   # 先看选什么
-python -m scoring.pipeline pick --db data/pubpeer.db --issue=1             # 正式打包（测试用 --issue=-1）
-```
+2. 两阶段打分选优：
+ stage-1 全部用廉价数据（捕获 + CrossRef/v3 富集）粗筛;stage-2 每类高分短名单深度回访，用真实评论算「激烈交互」
+`python -m scoring.pipeline rank --db data/pubpeer.db --stage1-only`   # 只粗筛（快）
+`python -m scoring.pipeline rank --db data/pubpeer.db`               # 完整两阶段
+
+3. 每期素材打包：rank 之后按类别选篇（每类至多 2 篇，小类 1 篇），把文章的 md + 评论图片收到 output/issue/<期号>/，并在数据库标记已发布
+`python -m scoring.pipeline pick --db data/pubpeer.db --issue=1 --dry-run`   # 先看选什么
+`python -m scoring.pipeline pick --db data/pubpeer.db --issue=1`             # 正式打包（测试用 --issue=-1）
 
 输出到 `output/score/<日期>/`：每分类的候选表（评分明细可审计）、全量分数 JSON、覆盖率报告。权重/打假人名单/每类篇数等见 `scoring/config.py`，均可调。
 

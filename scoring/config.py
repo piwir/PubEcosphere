@@ -77,5 +77,9 @@ class ScoringConfig:
     small_cat_threshold: int = 5    # 候选 < 此值视为「比较少的小类」
     small_cat_pick: int = 1         # 小类只取 1 篇
 
+    # ---- pick 选稿门槛：低分 / 无图文章不再入选（无后续推文价值） ----
+    min_pick_score: float = 0.45    # final_score 低于此值不选
+    min_pick_images: int = 1        # 评论无图片（has_image=0）不选；stage-1 无该维度时不过滤
+
     # ---- v3 富集缓存 TTL（天） ----
     enrich_ttl_days: int = 2

@@ -310,6 +310,10 @@ def cmd_pick(args) -> int:
         cfg.small_cat_threshold = args.small_cat_threshold
     if args.small_cat_pick is not None:
         cfg.small_cat_pick = args.small_cat_pick
+    if args.min_score is not None:
+        cfg.min_pick_score = args.min_score
+    if args.min_images is not None:
+        cfg.min_pick_images = args.min_images
 
     sstore = ScoringStore(args.db)
     run_id = args.run_id or sstore.latest_run_id()
@@ -380,6 +384,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--small-cat-threshold", type=int, default=None,
                    help="候选少于多少视为小类（默认 5）")
     p.add_argument("--small-cat-pick", type=int, default=None, help="小类取几篇（默认 1）")
+    p.add_argument("--min-score", type=float, default=None,
+                   help="最终分低于此值不选（默认 config min_pick_score=0.45）")
+    p.add_argument("--min-images", type=int, default=None,
+                   help="评论图片少于此值不选（默认 config min_pick_images=1）")
     p.add_argument("--dry-run", action="store_true", help="只打印将选的 picks，不写文件不标记")
     p.set_defaults(func=cmd_pick)
 

@@ -10,7 +10,9 @@
     pub/<pubpeer_id>_files/         该文评论图片本地化
 
 选优规则（config）：
-    每类候选 >= small_cat_threshold → 取 picks_per_cat（默认 2）篇；
+    先按选稿门槛过滤：final_score < min_pick_score 不选（低分无推文价值）；
+    评论无图片（has_image=0，取自 stage-2 breakdown.images）不选（无图文价值）。
+    然后每类候选 >= small_cat_threshold → 取 picks_per_cat（默认 2）篇；
     < 阈值视为小类 → 只取 small_cat_pick（默认 1）篇。
     已在其它期发布过的文章（published 表）一律不再考虑。
 """
@@ -53,10 +55,15 @@ def _impact_display(r: dict) -> str:
 
 
 def _load_run(sstore: ScoringStore, run_id: str) -> tuple[list[dict], dict[str, dict]]:
-    """短名单行（含 scores 的元数据） + 展示字段索引（title/journal/doi/url…）。"""
+    """短名单行（含 scores 的元数据） + 展示字段索引（title/journal/doi/url…）。
+
+    每行附加 `has_image`：stage-2 breakdown.images.norm（0/1，与评论表实际图片引用一致）。
+    stage-1 短名单（--stage1-only）无该维度 → None，select_picks 对 None 不过滤。
+    """
     cur = sstore.conn.execute(
         """SELECT s.pubpeer_id, s.major, s.minor, s.minor_partition, s.partition, s.top,
-                  s.impact_factor, s.ccf_grade, s.journal_alert, s.stage, s.final_score
+                  s.impact_factor, s.ccf_grade, s.journal_alert, s.stage, s.final_score,
+                  s.breakdown
            FROM scores s JOIN shortlist sl
              ON sl.run_id = s.run_id AND sl.pubpeer_id = s.pubpeer_id
            WHERE s.run_id = ?
@@ -64,6 +71,14 @@ def _load_run(sstore: ScoringStore, run_id: str) -> tuple[list[dict], dict[str, 
         (run_id,))
     cols = [d[0] for d in cur.description]
     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    for r in rows:
+        try:
+            b = json.loads(r.get("breakdown") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            b = {}
+        img = (b.get("images") or {}).get("norm")
+        r["has_image"] = int(img) if img is not None else None
+        r.pop("breakdown", None)
 
     idx: dict[str, dict] = {}
     if rows:
@@ -80,9 +95,20 @@ def _load_run(sstore: ScoringStore, run_id: str) -> tuple[list[dict], dict[str, 
 
 
 def select_picks(rows: list[dict], published_other: set[str], cfg) -> tuple[list[dict], dict[str, list[dict]]]:
-    """按类别选 picks。返回 (picks, grouped)。rows 已按 final 降序。"""
+    """按类别选 picks。返回 (picks, grouped)。rows 已按 final 降序。
+
+    先按选稿门槛过滤（config）：
+        - final_score < cfg.min_pick_score → 不选（低分无后续推文价值）；
+        - 评论无图片（has_image < cfg.min_pick_images）→ 不选；has_image=None（stage-1）不过滤。
+    过滤后再按类别分组，小类阈值/每类取篇数规则不变。
+    """
     grouped: dict[str, list[dict]] = {}
     for r in rows:
+        if r["final_score"] < cfg.min_pick_score:
+            continue
+        has_img = r.get("has_image")
+        if has_img is not None and has_img < cfg.min_pick_images:
+            continue
         r["category"] = category_for(r["major"], r["minor"])
         grouped.setdefault(r["category"], []).append(r)
     picks: list[dict] = []

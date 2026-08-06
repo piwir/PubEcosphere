@@ -36,14 +36,14 @@ class ScoringConfig:
     stage2_weights: dict = field(default_factory=lambda: {
         "author_response": 0.20,       # 作者本人回应
         "retraction_eoc": 0.20,        # 撤稿 / 关注声明 / 更正
-        "sleuth_gt": 0.15,             # 已知打假人
+        "sleuth_gt": 0.10,             # 已知打假人
         "rounds": 0.10,                # 多轮交锋（#N 引用）
         "journal_impact": 0.10,        # 期刊影响力（共享 stage1）
         "comment_volume_gt": 0.05,     # 真实评论数
         "evidence_links": 0.05,        # 评论中的证据链接
         "thread_span": 0.05,           # 交锋时间跨度
         "distinct_commenters_gt": 0.05,# 独立评论者
-        "images": 0.05,                # 评论含图片
+        "images": 0.10,                # 评论含图片
     })
 
     # ---- 归一化基线上限 ----
@@ -60,10 +60,10 @@ class ScoringConfig:
     # ---- 大类兴趣倍乘（限制关注领域旋钮）；空 dict = 不限制 ----
     category_interest: dict = field(default_factory=dict)
 
-    # ---- 知名打假人别名（子串匹配，小写归一） ----
+    # ---- 知名打假人精确别名（真名 + 公认证实马甲，小写归一、精确匹配） ----
     sleuths: tuple = (
-        "elisabeth bik", "sholto david", "matthew schrag",
-        "david sanders", "clare francis",
+        "elisabeth m bik", "hoya camphorifolia", "sholto david",
+        "leonid schneider", "matthew schrag", "david sanders", "clare francis",
     )
 
     # ---- 撤稿/关注声明关键词（评论 markdown 子串匹配，小写） ----

@@ -68,14 +68,13 @@ PubPeer 的公开接口 `/api/recent/from/{0..400}` 只能看到**最近约 3 �
 2. 回访（>=7 天后）：抓捕获过的文章页，提取评论（--limit 可分批续跑）
 `python -m crawler.crawl --db data/pubpeer.db revisit --limit 50`
 
-3. 导出：每篇文章一个 md（output/pub/<pubpeer_id>.md），评论图片下载到 <pubpeer_id>_files/
+3. 导出：每篇文章 md 与评论图片同目录（output/pub/<pubpeer_id>_files/<pubpeer_id>.md，md 内图片链接为裸文件名）
 `python -m crawler.export --db data/pubpeer.db --output output`
 
 
 ```
 output/pub/
-├── <pubpeer_id>.md          # 一篇文章一份：元数据 + 完整评论线程
-└── <pubpeer_id>_files/      # 该文评论引用的图片
+└── <pubpeer_id>_files/      # 该文评论引用的图片 + <pubpeer_id>.md（同目录，链接用裸文件名）
 ```
 
 ### 服务器部署
@@ -105,7 +104,7 @@ output/pub/
 
 输出到 `output/score/<日期>/`：每分类的候选表（评分明细可审计）、全量分数 JSON、覆盖率报告。权重/打假人名单/每类篇数等见 `scoring/config.py`，均可调。
 
-**每期素材**：`output/issue/<期号>/` 下 `manifest.md`（类别索引 + 分数 + 链接）、`manifest.json`、`pub/<pubpeer_id>.md`（完整评论线程）+ `<pubpeer_id>_files/`（评论图片本地化）。已标记发布（`published` 表）的文章，后续 `rank` 与 `pick` 默认不再考虑（`rank --include-published` 可强制纳入）。
+**每期素材**：`output/issue/<期号>/` 下 `manifest.md`（类别索引 + 分数 + 链接）、`manifest.json`、`pub/<pubpeer_id>_files/<pubpeer_id>.md`（完整评论线程 + 评论图片本地化，同目录、链接为裸文件名）。已标记发布（`published` 表）的文章，后续 `rank` 与 `pick` 默认不再考虑（`rank --include-published` 可强制纳入）。
 
 **数据来源**：中科院分区表 2025 / JCR 影响因子 / CCF 目录 / 预警名单来自 [hitfyd/ShowJCR](https://github.com/hitfyd/ShowJCR) 仓库（`data/` 下，gitignore 不提交）；DOI 解析走 CrossRef；评论摘要走 PubPeer v3 API。
 

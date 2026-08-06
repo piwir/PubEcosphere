@@ -6,8 +6,7 @@
 
 素材目录 output/issue/<issue>/：
     manifest.md / manifest.json     一期素材清单（类别 → picks）
-    pub/<pubpeer_id>.md             每篇一个完整评论 md
-    pub/<pubpeer_id>_files/         该文评论图片本地化
+    pub/<pubpeer_id>_files/         该文评论图片 + 完整评论 md（同目录）
 
 选优规则（config）：
     先按选稿门槛过滤：final_score < min_pick_score 不选（低分无推文价值）；
@@ -129,7 +128,7 @@ def _manifest_rows(picks: list[dict], meta: dict[str, dict], pubs: dict[str, dic
         m = meta.get(pid, {})
         pub = pubs.get(pid) or {}
         files_dir = pub_dir / f"{pid}_files"
-        n_img = len(list(files_dir.glob("*"))) if files_dir.exists() else 0
+        n_img = len([p for p in files_dir.glob("*") if p.suffix.lower() not in (".md",)]) if files_dir.exists() else 0
         rows.append({
             "pubpeer_id": pid,
             "category": p["category"],
@@ -143,7 +142,7 @@ def _manifest_rows(picks: list[dict], meta: dict[str, dict], pubs: dict[str, dic
             "journal_alert": p.get("journal_alert"),
             "doi": m.get("doi"),
             "url": m.get("url") or f"https://pubpeer.com/publications/{pid}",
-            "md": f"pub/{pid}.md",
+            "md": f"pub/{pid}_files/{pid}.md",
             "n_images": n_img,
         })
     return rows
@@ -195,11 +194,12 @@ def build_issue(sstore: ScoringStore, client: PubPeerClient, run_id: str, issue:
             print(f"  ⚠ {pid}: 无 publication 记录，跳过素材（可能未回访）", flush=True)
             continue
         files_dir = pub_dir / f"{pid}_files"
+        files_dir.mkdir(parents=True, exist_ok=True)
         src_files = src_pub / f"{pid}_files"
         if src_files.exists():                       # 复用已本地化的图片，只补缺
             shutil.copytree(src_files, files_dir, dirs_exist_ok=True)
         md = render_publication(client, pub, comments.get(pid, []), files_dir)
-        (pub_dir / f"{pid}.md").write_text(md, encoding="utf-8")
+        (files_dir / f"{pid}.md").write_text(md, encoding="utf-8")
         picked_rows.append(p)
         published_rows.append({
             "pubpeer_id": pid, "issue": issue, "category": p["category"],

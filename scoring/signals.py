@@ -15,25 +15,25 @@ _DOI_RE = re.compile(r"10\.\d{4,9}/[^\s)\"']+")
 _ROUND_RE = re.compile(r"#\s*(\d+)")
 
 
-def matches_sleuth(name: str, sleuths: tuple) -> bool:
-    """姓氏匹配：评论者姓 == 某打假人姓（如 'Elisabeth M Bik' ↔ 'Elisabeth Bik'）。
+def _norm_name(s: str) -> str:
+    """名字归一：小写 + 非字母数字（标点/连字符/空白/全角字符）折叠为单个空格。
 
-    连续子串匹配会被中间名缩写（m）挡住，故按姓氏判断，对知名打假人足够可靠。
+    用于打假人名单的全等匹配，容忍 'Elisabeth M. Bik' 与 'Elisabeth M Bik'、
+    'Yi‐ming Yuan'（U+2010 连字符）等同一人的书写差异。
     """
-    n = (name or "").strip().lower()
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").strip().lower()).strip()
+
+
+def matches_sleuth(name: str, sleuths: tuple) -> bool:
+    """精确别名匹配：评论者显示名（别名/真名）与打假人名单归一后全等。
+
+    名单存「真名/马甲」的精确键（如 'Elisabeth M Bik'、'Hoya Camphorifolia'），
+    只做书写归一、不做姓氏模糊，避免同姓（如 Ben-David 撞 Sholto David）误判。
+    """
+    n = _norm_name(name)
     if not n:
         return False
-    tokens = [t for t in re.split(r"[^a-z]+", n) if t]
-    if not tokens:
-        return False
-    last = tokens[-1]
-    if len(last) < 3:
-        return False
-    for sl in sleuths:
-        sl_tokens = [t for t in re.split(r"[^a-z]+", sl.lower()) if t]
-        if sl_tokens and len(sl_tokens[-1]) >= 3 and sl_tokens[-1] == last:
-            return True
-    return False
+    return any(_norm_name(s) == n for s in sleuths)
 
 
 def _dt(s: str | None) -> datetime | None:
@@ -83,7 +83,10 @@ def extract_comment_signals(comments: list[dict], sleuths: tuple = config.Scorin
             has_image = 1
         n_links += len(_URL_RE.findall(md)) + len(_DOI_RE.findall(md))
         users.add(normalize_user(c))
-        if not has_sleuth and matches_sleuth(c.get("user_name"), sleuths):
+        if not has_sleuth and (
+            matches_sleuth(c.get("user_alias"), sleuths)
+            or matches_sleuth(c.get("user_name"), sleuths)
+        ):
             has_sleuth = 1
         for ref in _ROUND_RE.findall(md):
             try:

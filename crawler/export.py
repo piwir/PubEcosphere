@@ -4,10 +4,11 @@
     python -m crawler.export --db data/pubpeer.db --output output
 
 输出（output/ 已被 .gitignore，只存仓库、不提交）：
-    output/pub/<pubpeer_id>.md              一篇文章一个 md，含完整评论线程
     output/pub/<pubpeer_id>_files/          该文评论中引用到的图片（本地副本）
+    output/pub/<pubpeer_id>_files/<pubpeer_id>.md
+                                            md 与图片同目录，含完整评论线程
 
-评论 markdown 里的图片链接会被改写为本地相对路径，下载失败时保留原链接。
+评论 markdown 里的图片链接会被改写为同目录下的裸文件名（下载失败时保留原链接）。
 """
 from __future__ import annotations
 
@@ -48,6 +49,7 @@ def _download_images(client: PubPeerClient, markdown: str, files_dir: Path) -> s
         try:
             if not dest.exists():
                 dest.write_bytes(client.get_binary(url))
+            # md 与图片同在 <pid>_files/ 下，链接用裸文件名即可解析
             return name
         except Exception:  # noqa: BLE001 —— 单张图片失败保留原链接
             return None
@@ -137,9 +139,10 @@ def main(argv: list[str] | None = None) -> int:
     n_img = 0
     for pid, pub in sorted(pubs.items()):
         files_dir = out_dir / f"{pid}_files"
+        files_dir.mkdir(parents=True, exist_ok=True)
         md = render_publication(client, pub, comments_by_pub.get(pid, []), files_dir)
-        (out_dir / f"{pid}.md").write_text(md, encoding="utf-8")
-        n_imgs = len(list(files_dir.glob("*"))) if files_dir.exists() else 0
+        (files_dir / f"{pid}.md").write_text(md, encoding="utf-8")
+        n_imgs = len([p for p in files_dir.glob("*") if p.suffix.lower() not in (".md",)])
         n_img += n_imgs
         if args.verbose:
             print(f"  {pid}: {len(comments_by_pub.get(pid, []))} comments, {n_imgs} images", flush=True)

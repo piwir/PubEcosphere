@@ -19,8 +19,7 @@ venv/
 data/pubpeer.db
 output/
 
-
-# 隐私文档与素材（不推送）
+# docs
 docs/PubEcosphere.md
 docs/prompt_example.txt
 docs/llm-scheme.md

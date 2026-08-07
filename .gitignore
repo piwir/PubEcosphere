@@ -18,8 +18,10 @@ venv/
 *.log
 data/pubpeer.db
 output/
-docs/
+
 
 # 隐私文档与素材（不推送）
 docs/PubEcosphere.md
+docs/prompt_example.txt
+docs/llm-scheme.md
 CLAUDE.md

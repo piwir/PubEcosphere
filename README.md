@@ -19,14 +19,14 @@
 1. **爬虫 + 结构化** — 爬取 PubPeer 文章评论数据，整理为 Markdown 结构化数据
 2. **打分体系** — 对候选文章多维度打分，筛选「激烈交锋」的高价值案例
 3. **图片处理** — 将多张截图/图片合成为一张，嵌入周报
-4. **大模型生成** — 接入大模型，识别冲突点并生成周报草稿
+4. **大模型生成** — 双模型分工（阶段A 多模态提取冲突点 → 阶段B 写稿），生成 HelloGitHub 式周报草稿；当前手动上传，`llm/` 为预留 API 接入（方案见 `docs/llm-scheme.md`）
 
 
 ## 项目结构
 
 ```
 PubEcosphere/
-├── images/             # 项目素材
+├── images/             # 项目素材 AI生成
 ├── crawler/            # 爬虫模块
 │   ├── client.py       # HTTP 客户端：浏览器 UA、限速、退避重试、接口 URL
 │   ├── dates.py        # 日期解析：feed 格式 / ISO 格式归一化为 UTC
@@ -46,6 +46,14 @@ PubEcosphere/
 │   ├── issue.py        # 每类选 → 收集 md+图片到 output/issue/<期号>/ → 标记已发布
 │   ├── report.py       # 输出 JSON + Markdown 到 output/score/<日期>/
 │   └── config.py       # 权重/基线/打假人名单/分类粒度/每期篇数，全部可调
+├── llm/                # 周报生成接入（预留未启用，方案见 docs/llm-scheme.md）
+│   ├── flatten.py      # 摊平 material → output/issue/<期号>/upload/ 扁平上传文件夹
+│   ├── vision.py       # 阶段A 多模态提取：素材 md + 合并图 → 冲突点提取块
+│   ├── writer.py       # 阶段B 周报写稿：阶段A 提取块 → 整期周报 md
+│   ├── assemble.py     # 排版：草稿 → 成品 md + 图复制（与 md 同目录）
+│   ├── client.py       # OpenAI 兼容 chat/completions（stdlib urllib，可注入假 transport）
+│   ├── selftest.py     # 离线自测（不联网不调模型）
+│   └── __main__.py     # CLI：check / selftest / flatten / vision / writer / assemble
 ├── data/               # 运行数据
 ├── output/             # 生成的周报 Markdown + 打分报告
 ├── environment.yml     
@@ -107,6 +115,26 @@ output/pub/
 **每期素材**：`output/issue/<期号>/` 下 `manifest.md`（类别索引 + 分数 + 链接）、`manifest.json`、`pub/<pubpeer_id>_files/<pubpeer_id>.md`（完整评论线程 + 评论图片本地化，同目录、链接为裸文件名）。已标记发布（`published` 表）的文章，后续 `rank` 与 `pick` 默认不再考虑（`rank --include-published` 可强制纳入）。
 
 **数据来源**：中科院分区表 2025 / JCR 影响因子 / CCF 目录 / 预警名单来自 [hitfyd/ShowJCR](https://github.com/hitfyd/ShowJCR) 仓库（`data/` 下，gitignore 不提交）；DOI 解析走 CrossRef；评论摘要走 PubPeer v3 API。
+
+## LLM 周报生成（方案与提示词）
+
+从 `pick` 产出的 `output/issue/<期号>/material/` 生成一期 HelloGitHub 式周报推文。**当前手动上传**（贴提示词 + 上传扁平素材），`llm/` 包为预留 API 接入、默认不启用。方案总述见 `docs/llm-scheme.md`，提示词见 `docs/prompts/`。
+
+```bash
+# 1. 摊平上传文件夹（离线）：output/issue/<期号>/upload/，无子目录，方便对话平台框选上传
+python -m llm flatten --material-dir output/issue/-1/material \
+    --upload-dir output/issue/-1/upload --manifest output/issue/-1/manifest.json
+
+# 2.（手动）阶段A：贴 prompt_vision_extract.md + 上传该篇 <pid>.md 与 <pid>_*.png → 冲突点提取块
+# 3.（手动）阶段B：贴 prompt_weekly_writer.md + stageA_combined.md → 周报草稿 weekly/<期号>_draft.md
+
+# 4. 排版（离线）：草稿 → 成品 md + 图复制（md 与图同目录，供 baoyu-markdown-to-html 转换）
+python -m llm assemble --material-dir output/issue/-1/material \
+    --weekly-dir output/issue/-1/weekly --issue -1
+
+# 自检（离线）
+python -m llm check && python -m llm selftest
+```
 
 ## 免责声明
 

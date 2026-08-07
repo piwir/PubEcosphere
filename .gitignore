@@ -20,8 +20,6 @@ data/pubpeer.db
 output/
 
 # docs
-docs/PubEcosphere.md
-docs/prompt_example.txt
-docs/llm-scheme.md
+docs/
 CLAUDE.md
-.baoyu-skills/
+!docs/prompts

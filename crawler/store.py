@@ -100,12 +100,13 @@ class Store:
         return len(records)
 
     def captures_for_revisit(
-        self, since: str | None = None, limit: int | None = None,
-        force: bool = False, min_comments: int = 0,
+        self, since: str | None = None, until: str | None = None,
+        limit: int | None = None, force: bool = False, min_comments: int = 0,
     ) -> list[dict]:
         """待回访的捕获记录。
 
         默认选取 7 天前捕获、且 7 天内未回访过的记录（`--force` 则无视回访时间）；
+        `until` 给定 captured_at 上界（首现窗口，如只回访 8.1-8.7 期候选）；
         `min_comments > 0` 时只取评论数达到该阈值的文章。
         """
         q = "SELECT * FROM captures WHERE 1=1"
@@ -113,6 +114,9 @@ class Store:
         if since is not None:
             q += " AND captured_at >= ?"
             params.append(since)
+        if until is not None:
+            q += " AND captured_at < ?"
+            params.append(until)
         if min_comments > 0:
             q += " AND comments_total >= ?"
             params.append(min_comments)

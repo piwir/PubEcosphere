@@ -12,6 +12,7 @@ from .config import PROMPT_DIR_DEFAULT
 PROMPT_FILES = {
     "vision": "prompt_vision_extract.md",   # 阶段A 多模态提取
     "writer": "prompt_weekly_writer.md",    # 阶段B 周报写稿
+    "extract_text": "prompt_extract_text.md",  # 阶段A 文本提取
 }
 SECTIONS = [
     "【角色设定】",

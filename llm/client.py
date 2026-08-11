@@ -95,7 +95,15 @@ class LLMClient:
             if status != 200:
                 raise LLMError(f"chat/completions returned {status}: {data!r}")
             try:
-                return data["choices"][0]["message"]["content"]
+                choice = data["choices"][0]
+                finish = choice.get("finish_reason")
+                content = choice["message"]["content"]
             except (KeyError, IndexError, TypeError) as exc:
                 raise LLMError(f"unexpected response shape: {data!r}") from exc
+            if finish == "length":
+                # 输出被 max_tokens 截断：静默返回残缺草稿比报错更糟。
+                raise LLMError(
+                    f"输出被 max_tokens 截断（finish_reason=length，已收 {len(content)} 字）。"
+                    "请调大 PUBECOSPHERE_LLM_MAX_TOKENS（deepseek-v4-flash 上限 384K）。")
+            return content
         raise LLMError(f"retries exhausted, last: {last!r}")

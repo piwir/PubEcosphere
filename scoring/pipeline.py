@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,6 +29,14 @@ from .store import ScoringStore
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _score_root(args) -> Path:
+    """打分报告目录：给 --issue 时写 output/issue/<期号>/score/，否则写 output/score/。"""
+    root = Path(args.output)
+    if getattr(args, "issue", None) is not None:
+        return root / "issue" / str(args.issue) / "score"
+    return root / "score"
 
 
 def _build_indexes(args):
@@ -82,11 +91,11 @@ def _pub_authors(pub: dict | None) -> list[str]:
         return []
 
 
-def _in_window(last_commented: str | None, window: tuple[int, int]) -> bool:
-    if not last_commented:
+def _in_window(field_value: str | None, window: tuple[int, int]) -> bool:
+    if not field_value:
         return False
     try:
-        dt = datetime.fromisoformat(last_commented.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(field_value.replace("Z", "+00:00"))
     except ValueError:
         return False
     now = datetime.now(timezone.utc)
@@ -156,7 +165,10 @@ def cmd_coverage(args) -> int:
     captures = sstore.all_captures()
     cov = _coverage_rows(cas_idx, jcr_idx, ccf_idx, captures)
 
-    out_dir = Path(args.output) / "score"
+    out_dir = _score_root(args)
+    # 只清 coverage 两文件（不误删 rank 的 run 报告目录）
+    for name in ("coverage.json", "coverage.md"):
+        (out_dir / name).unlink(missing_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "coverage.json").write_text(json.dumps(cov, ensure_ascii=False, indent=1), encoding="utf-8")
     (out_dir / "coverage.md").write_text(_coverage_md(cov), encoding="utf-8")
@@ -233,7 +245,7 @@ def cmd_rank(args) -> int:
         results.append({
             "pubpeer_id": cap["pubpeer_id"], "title": cap["title"],
             "journal": cap["journal"], "issn": cap["issn"],
-            "last_commented": cap["last_commented"],
+            "last_commented": cap["last_commented"], "captured_at": cap["captured_at"],
             **jinfo, "category": _category_for(jinfo, args.level),
             "stage": 1, "stage1": s1, "stage2": None, "final": s1,
             "comments_total": cap["comments_total"] or 0,
@@ -244,9 +256,9 @@ def cmd_rank(args) -> int:
 
     if args.window:
         before = len(results)
-        results = [r for r in results if _in_window(r["last_commented"], args.window)]
+        results = [r for r in results if _in_window(r[args.window_field], args.window)]
         if args.verbose:
-            print(f"window {args.window}: {before} → {len(results)}", flush=True)
+            print(f"window {args.window} on {args.window_field}: {before} → {len(results)}", flush=True)
 
     # ---- 3. 短名单 + stage-2 深度 ----
     shortlist_rows = _make_shortlist(results, args.max_per_cat)
@@ -293,7 +305,10 @@ def cmd_rank(args) -> int:
     } for r in shortlist_rows])
 
     cov = _coverage_rows(cas_idx, jcr_idx, ccf_idx, captures)
-    out = report.write_all(Path(args.output) / "score", run_id, results, shortlist_rows,
+    score_root = _score_root(args)
+    # rank 自带 coverage 输出：整体清空再写，重跑即全新（scores/shortlist 留在 DB，仅报告刷新）
+    shutil.rmtree(score_root, ignore_errors=True)
+    out = report.write_all(score_root, run_id, results, shortlist_rows,
                            cov, _coverage_md(cov))
     print(f"rank done: {len(results)} articles, shortlist {len(shortlist_rows)}, run_id={run_id}")
     print(f"  → {out}")
@@ -360,15 +375,20 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("coverage", parents=[common], help="期刊覆盖率报告（不评分不联网）")
+    p.add_argument("--issue", default=None, help="期号标注：报告写到 output/issue/<期号>/score/（不填则写 output/score/）")
     p.set_defaults(func=cmd_coverage)
 
     p = sub.add_parser("rank", parents=[common], help="两阶段打分：粗筛全部 → 短名单深度回访")
+    p.add_argument("--issue", default=None, help="期号标注：报告写到 output/issue/<期号>/score/（不填则写 output/score/）")
     p.add_argument("--run-id", default=None, help="报告日期，默认今天")
     p.add_argument("--level", choices=("major", "minor"), default="minor",
                    help="报告分类粒度：大类或小类（默认小类，细分更接近 HelloGitHub 模式）")
     p.add_argument("--stage1-only", action="store_true", help="只做 stage-1 粗筛，不深度回访")
     p.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
-                   help="硬过滤 last_commented∈[now-D1,now-D2)（默认不过滤）")
+                   help="硬过滤 字段∈[now-D1,now-D2)（默认不过滤）")
+    p.add_argument("--window-field", choices=("last_commented", "captured_at"),
+                   default="last_commented",
+                   help="--window 作用的日期字段（默认 last_commented；按首次捕获选期用 captured_at）")
     p.add_argument("--max-per-cat", type=int, default=5, help="每大类短名单上限")
     p.add_argument("--include-published", action="store_true",
                    help="把已发布（published 表）文章也纳入打分（默认排除）")

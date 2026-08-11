@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -134,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
         comments_by_pub[row["pubpeer_id"]].append(row)
 
     out_dir = Path(args.output) / "pub"
+    # 整体重建：每次 export 用最新库全量重生成，旧存档整体替换（新覆盖旧，无残留）
+    shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     n_img = 0

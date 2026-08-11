@@ -180,6 +180,11 @@ def build_issue(sstore: ScoringStore, client: PubPeerClient, run_id: str, issue:
 
     issue_dir = out_root / "issue" / str(issue)
     pub_dir = issue_dir / "pub"
+    # 只清 pick 自己的输出（pub/ + manifest.*），不动 material/upload/weekly（归后面命令）
+    if pub_dir.exists():
+        shutil.rmtree(pub_dir)
+    for name in ("manifest.json", "manifest.md"):
+        (issue_dir / name).unlink(missing_ok=True)
     pub_dir.mkdir(parents=True, exist_ok=True)
     src_pub = out_root / "pub"
 

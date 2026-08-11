@@ -1,4 +1,4 @@
-"""图材整理：从 pick 素材夹生成推文图材，每篇至多三张合并图。
+"""图材整理：从 pick 素材夹生成推文图材，每篇三类合并图（first/author/sleuth）。
 
 用法：
     python -m scoring.material --pub-dir output/issue/-1/pub \
@@ -9,10 +9,12 @@
 
 1. 图片路径修正：export/issue 已保证 md 与图片同在 <pid>_files/ 下，链接为裸文件名，
    本模块把选定图片与结构化 md 归到同一目录 <pid>/。
-2. 多图合并，每篇至多三张：
-   - first_merged.png     最早提出质疑的评论者（首位质疑人）发的图，合并成一张；
-   - author_merged.png    若有作者回应，作者回应的图合并成一张；
-   - sleuth_merged.png    若有知名打假人且与首位质疑人不同，其图再合并一张备用。
+2. 多图合并，每张合并图默认至多 4 张源图（均匀网格、白底、细灰边框，避免塞太多看不清楚）；
+   超限自动拆多张：第 0 张 `first_merged.png`，第 N 张 `first_merged_N.png`。
+   每篇三类各自拆分，合并图总数允许超过 3：
+   - first_merged[_N].png   最早提出质疑的评论者（首位质疑人）发的图；
+   - author_merged[_N].png  若有作者回应，作者回应的图；
+   - sleuth_merged[_N].png  若有知名打假人且与首位质疑人不同，其图再合并备用。
 3. 结构化输出：<out>/index.md（清单）+ <out>/<pid>/<pid>.md（每篇素材，内嵌合并图）。
 
 打假人判定复用 signals.matches_sleuth（精确别名匹配，名单在 config.ScoringConfig.sleuths）。
@@ -22,11 +24,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from .config import ScoringConfig
 from .signals import _norm_name, matches_sleuth
@@ -152,33 +155,63 @@ def _open_rgb(path: Path) -> Image.Image:
     return im
 
 
-def merge_images(paths: list[Path], out_path: Path, max_cell_h: int = 800,
-                 cols: int = 4, gap: int = 8) -> Path | None:
-    """把多张评论图合并成一张（网格布局，白底）。单张时也归一为输出图，命名统一。"""
+def _fit_box(im: Image.Image, max_w: int, max_h: int) -> Image.Image:
+    """按比例缩放到 (max_w, max_h) 框内（只缩小不放大），保持纵横比。"""
+    w, h = im.size
+    if w > max_w or h > max_h:
+        ratio = min(max_w / w, max_h / h)
+        im = im.resize((max(1, int(w * ratio)), max(1, int(h * ratio))), Image.LANCZOS)
+    return im
+
+
+def _numbered_path(path: Path, index: int) -> Path:
+    """out_path 是第 0 张；第 index 张在 .png 前插序号：first_merged.png → first_merged_2.png。"""
+    return path.with_name(f"{path.stem}_{index + 1}{path.suffix}")
+
+
+def _draw_cell_border(canvas: Image.Image, x: int, y: int, w: int, h: int,
+                      color: tuple = (222, 222, 222), width: int = 1) -> None:
+    """在网格单元格外沿画一圈浅灰细边框，区分每张小图。"""
+    d = ImageDraw.Draw(canvas)
+    d.rectangle([x, y, x + w - 1, y + h - 1], outline=color, width=width)
+
+
+def merge_images(paths: list[Path], out_path: Path, max_images: int = 4,
+                 max_cell_w: int = 1000, max_cell_h: int = 800, gap: int = 10,
+                 cols: int | None = None, border: bool = True) -> list[Path]:
+    """把多张评论图合并成若干张（每张至多 max_images 张源图，均匀网格、白底、细灰边框）。
+
+    超出 max_images 自动拆成多张：第 0 张写 out_path，第 N 张写 *_N.png
+    （first_merged.png / first_merged_2.png / …）。每张源图归一化到
+    (max_cell_w, max_cell_h) 框内；列数 ≤2 张单列、3 张以上两列，避免合并太多看不清楚。
+    返回实际写出的路径列表（paths 为空返回 []）。
+    """
     if not paths:
-        return None
-    imgs = [_open_rgb(p) for p in paths]
-    for i, im in enumerate(imgs):
-        w, h = im.size
-        if h > max_cell_h:
-            ratio = max_cell_h / h
-            imgs[i] = im.resize((max(1, int(w * ratio)), max_cell_h), Image.LANCZOS)
-    n = len(imgs)
-    ncols = min(cols, n)
-    nrows = (n + ncols - 1) // ncols
-    cell_w = max(im.size[0] for im in imgs)
-    cell_h = max(im.size[1] for im in imgs)
-    canvas = Image.new("RGB",
-                       (ncols * cell_w + (ncols + 1) * gap, nrows * cell_h + (nrows + 1) * gap),
-                       (255, 255, 255))
-    for idx, im in enumerate(imgs):
-        r, c = divmod(idx, ncols)
-        x = gap + c * (cell_w + gap)
-        y = gap + r * (cell_h + gap)
-        canvas.paste(im, (x + (cell_w - im.size[0]) // 2, y + (cell_h - im.size[1]) // 2))
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(out_path)
-    return out_path
+        return []
+    batches = [paths[i:i + max_images] for i in range(0, len(paths), max_images)]
+    out_paths: list[Path] = []
+    for bi, batch in enumerate(batches):
+        imgs = [_fit_box(_open_rgb(p), max_cell_w, max_cell_h) for p in batch]
+        n = len(imgs)
+        ncols = cols or (1 if n <= 2 else 2)
+        nrows = (n + ncols - 1) // ncols
+        cell_w = max(im.size[0] for im in imgs)
+        cell_h = max(im.size[1] for im in imgs)
+        canvas = Image.new("RGB",
+                           (ncols * cell_w + (ncols + 1) * gap, nrows * cell_h + (nrows + 1) * gap),
+                           (255, 255, 255))
+        for idx, im in enumerate(imgs):
+            r, c = divmod(idx, ncols)
+            x = gap + c * (cell_w + gap)
+            y = gap + r * (cell_h + gap)
+            canvas.paste(im, (x + (cell_w - im.size[0]) // 2, y + (cell_h - im.size[1]) // 2))
+            if border:
+                _draw_cell_border(canvas, x, y, cell_w, cell_h)
+        target = out_path if bi == 0 else _numbered_path(out_path, bi)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        canvas.save(target)
+        out_paths.append(target)
+    return out_paths
 
 
 def _md_meta(md: str) -> dict:
@@ -219,38 +252,63 @@ def _comment_block(c: Comment, img_paths: dict[str, Path]) -> str:
     return f"{head}\n\n{body or '（无正文）'}\n"
 
 
+def _merged_section(label: str, files: list[str], fig_note: str) -> list[str]:
+    """渲染「图（推文用）」小节：多张合并图逐张列出，第 2 张起在 note 后补「（第 N 张）」。
+
+    例如 first_merged.png → `![质疑人证据图（合并 8 张源图）](first_merged.png)`；
+         first_merged_2.png → `![质疑人证据图（合并 8 张源图）（第 2 张）](first_merged_2.png)`。
+    """
+    lines = [f"## {label}（推文用）"]
+    for i, name in enumerate(files):
+        pos = "（第 %d 张）" % (i + 1) if i > 0 else ""
+        lines.append(f"![{label}{fig_note}{pos}]({name})")
+    if not files:
+        lines.append("（无图）")
+    lines.append("")
+    return lines
+
+
+def _fig_note(files: list[str], src_n: int) -> str:
+    """合并图数量注记：'（2 张合并图，源图 8 张）'；单源单合并时简写 '（1 张）'。"""
+    if not files:
+        return "（无图）"
+    n = len(files)
+    if n == 1 and src_n == 1:
+        return "（1 张）"
+    return f"（{n} 张合并图，源图 {src_n} 张）"
+
+
 def _paper_md(pid: str, meta: dict, first: Comment, sleuth: Comment | None,
               first_n: int, first_n_img: int, sleuth_n: int, sleuth_n_img: int,
               author_n: int, author_n_img: int,
+              first_files: list[str], sleuth_files: list[str], author_files: list[str],
               first_block: str, sleuth_block: str, author_bodies: list[str]) -> str:
     pubpeer = meta.get("pubpeer_url") or f"https://pubpeer.com/publications/{pid}"
-    first_fig = f"（合并 {first_n_img} 张）" if first_n_img else "（无图）"
-    sleuth_fig = f"（合并 {sleuth_n_img} 张）" if sleuth_n_img else ""
-    author_fig = f"（合并 {author_n_img} 张）" if author_n_img else ""
     sleuth_label = f"知名打假人：{sleuth.alias}" if sleuth else "知名打假人：无"
+    first_fig = f"（合并 {first_n_img} 张源图）" if first_n_img else "（无图）"
+    sleuth_fig = f"（合并 {sleuth_n_img} 张源图）" if sleuth_n_img else ""
+    author_fig = f"（合并 {author_n_img} 张源图）" if author_n_img else ""
     lines = [
         f"# {meta.get('title') or pid}",
         f"- 期刊：{meta.get('journal') or '-'}",
         f"- DOI：{meta.get('doi') or '-'}",
         f"- PubPeer：[讨论]({pubpeer})",
         f"- 质疑人：{first.alias}（最早质疑 {first.when}，共 {first_n} 条评论）",
-        f"- {sleuth_label}{f'（备用图 {sleuth_n_img} 张）' if sleuth_n_img else ''}",
+        f"- {sleuth_label}{f'（备用图 {sleuth_n_img} 张源图）' if sleuth_n_img else ''}",
         f"- 作者回应：{'是' if author_n else '否'}{f'（共 {author_n} 条评论）' if author_n else ''}",
-        f"- 素材图：质疑人图{first_fig}{f' · 打假人备用图{sleuth_fig}' if sleuth_n_img else ''}"
-        f"{f' · 作者回应图{author_fig}' if author_n_img else ''}",
+        f"- 素材图：质疑人图{_fig_note(first_files, first_n_img)}"
+        f"{f' · 打假人备用图{_fig_note(sleuth_files, sleuth_n_img)}' if sleuth_files else ''}"
+        f"{f' · 作者回应图{_fig_note(author_files, author_n_img)}' if author_files else ''}",
         "",
         "## 质疑人证据图（推文用）",
-        f"![质疑人证据图{first_fig}](first_merged.png)" if first_n_img else "（首位质疑人评论未附图）",
-        "",
     ]
-    if sleuth_n_img:
-        lines += ["## 知名打假人备用图（推文用）",
-                  f"![知名打假人备用图{sleuth_fig}](sleuth_merged.png)", ""]
-    if author_n_img:
-        lines += ["## 作者回应图（推文用）",
-                  f"![作者回应图{author_fig}](author_merged.png)", ""]
+    lines += _merged_section("质疑人证据图", first_files, first_fig)
+    if sleuth_files:
+        lines += _merged_section("知名打假人备用图", sleuth_files, sleuth_fig)
+    if author_files:
+        lines += _merged_section("作者回应图", author_files, author_fig)
     lines += ["## 相关评论", "", first_block or f"### 质疑人 · {first.when}\n\n（无正文）", ""]
-    if sleuth_block and sleuth_n_img:
+    if sleuth_block and sleuth_files:
         lines += [sleuth_block, ""]
     for b in author_bodies:
         lines += [b, ""]
@@ -258,7 +316,9 @@ def _paper_md(pid: str, meta: dict, first: Comment, sleuth: Comment | None,
 
 
 def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
-                   sleuths: tuple = ScoringConfig.sleuths, dry_run: bool = False) -> list[dict]:
+                   sleuths: tuple = ScoringConfig.sleuths, dry_run: bool = False,
+                   max_images: int = 4, max_cell_w: int = 1000, max_cell_h: int = 800,
+                   cols: int | None = None) -> list[dict]:
     """从 pub/ 素材夹生成图材夹。返回每篇的处理结果（含路径与图数，供 index 渲染）。"""
     pub_dir = Path(pub_dir)
     out_root = Path(out_root)
@@ -310,7 +370,7 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
             "first_n": len(first_comments), "first_n_img": len(first_imgs),
             "sleuth_n": len(sleuth_comments), "sleuth_n_img": len(sleuth_imgs),
             "author_n": len(author_comments), "author_n_img": len(author_imgs),
-            "first_path": None, "sleuth_path": None, "author_path": None, "md_rel": None,
+            "first_paths": [], "sleuth_paths": [], "author_paths": [], "md_rel": None,
         }
 
         if not dry_run:
@@ -319,11 +379,17 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
             work_dir.mkdir(parents=True, exist_ok=True)
 
             first_paths = [imgs_on_disk[n] for n in first_imgs if n in imgs_on_disk]
-            result["first_path"] = merge_images(first_paths, work_dir / "first_merged.png")
+            result["first_paths"] = merge_images(first_paths, work_dir / "first_merged.png",
+                                                 max_images=max_images, max_cell_w=max_cell_w,
+                                                 max_cell_h=max_cell_h, cols=cols)
             sleuth_paths = [imgs_on_disk[n] for n in sleuth_imgs if n in imgs_on_disk]
-            result["sleuth_path"] = merge_images(sleuth_paths, work_dir / "sleuth_merged.png")
+            result["sleuth_paths"] = merge_images(sleuth_paths, work_dir / "sleuth_merged.png",
+                                                  max_images=max_images, max_cell_w=max_cell_w,
+                                                  max_cell_h=max_cell_h, cols=cols)
             author_paths = [imgs_on_disk[n] for n in author_imgs if n in imgs_on_disk]
-            result["author_path"] = merge_images(author_paths, work_dir / "author_merged.png")
+            result["author_paths"] = merge_images(author_paths, work_dir / "author_merged.png",
+                                                  max_images=max_images, max_cell_w=max_cell_w,
+                                                  max_cell_h=max_cell_h, cols=cols)
 
             first_block = _comment_block(first_comments[0], imgs_on_disk) if first_comments else ""
             sleuth_block = _comment_block(sleuth_comments[0], imgs_on_disk) if sleuth_comments else ""
@@ -332,6 +398,9 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
                                 len(first_comments), len(first_paths),
                                 len(sleuth_comments), len(sleuth_paths),
                                 len(author_comments), len(author_paths),
+                                [p.name for p in result["first_paths"]],
+                                [p.name for p in result["sleuth_paths"]],
+                                [p.name for p in result["author_paths"]],
                                 first_block, sleuth_block, author_bodies)
             (work_dir / f"{pid}.md").write_text(content, encoding="utf-8")
             result["md_rel"] = f"{pid}/{pid}.md"
@@ -339,11 +408,18 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
         results.append(result)
         print(f"  {pid}: 质疑人 {first.alias} · 最早 {first.when}"
               f"{f' · 打假人 {sleuth.alias}' if sleuth else ''} · "
-              f"质疑图 {len(first_imgs)}→1 · "
-              f"备用图 {len(sleuth_imgs)}→{1 if sleuth_imgs else 0} · "
-              f"回应图 {len(author_imgs)}→{1 if author_imgs else 0}",
+              f"质疑图 {len(first_imgs)}源→{len(result['first_paths'])}张 · "
+              f"备用图 {len(sleuth_imgs)}源→{len(result['sleuth_paths'])}张 · "
+              f"回应图 {len(author_imgs)}源→{len(result['author_paths'])}张",
               flush=True)
     return results
+
+
+def _img_links(pid: str, paths: list[Path]) -> str:
+    """index 里某类的合并图链接：多张合并图依次列出（first_merged.png / first_merged_2.png）。"""
+    if not paths:
+        return "-"
+    return " ".join(f"[图]({pid}/{p.name})" for p in paths)
 
 
 def _index_md(issue: str, results: list[dict]) -> str:
@@ -362,9 +438,9 @@ def _index_md(issue: str, results: list[dict]) -> str:
         journal = (r.get("journal") or "")[:24]
         resp = f"{r['author_n']} 条" if r["author_n"] else "否"
         sleuth = r.get("sleuth") or "-"
-        first_img = f"[图]({r['pubpeer_id']}/first_merged.png)" if r["first_path"] else "-"
-        sleuth_img = f"[图]({r['pubpeer_id']}/sleuth_merged.png)" if r["sleuth_path"] else "-"
-        author_img = f"[图]({r['pubpeer_id']}/author_merged.png)" if r["author_path"] else "-"
+        first_img = _img_links(r["pubpeer_id"], r["first_paths"])
+        sleuth_img = _img_links(r["pubpeer_id"], r["sleuth_paths"])
+        author_img = _img_links(r["pubpeer_id"], r["author_paths"])
         link = f"[md]({r['md_rel']})" if r["md_rel"] else "-"
         lines.append(f"| {cat} | {title} | {journal} | {r['questioner']} | {r['first_at']} | {sleuth} | "
                      f"{resp} | {first_img} | {sleuth_img} | {author_img} | {link} |")
@@ -376,8 +452,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pub-dir", default="output/issue/-1/pub", help="pick 素材夹（含 <pid>_files/ md+图片）")
     ap.add_argument("--issue-dir", default=None, help="issue 目录（读 manifest.json 补分类/分数），默认取 pub-dir 上级")
     ap.add_argument("--out", default="output/issue/-1/material", help="图材输出目录")
-    ap.add_argument("--max-cell-h", type=int, default=800, help="合并图中单张图最大高度（px）")
-    ap.add_argument("--cols", type=int, default=4, help="合并图网格列数")
+    ap.add_argument("--max-images", type=int, default=4, help="每张合并图最多合并的源图数，超限自动拆 *_2.png 等")
+    ap.add_argument("--max-cell-w", type=int, default=1000, help="合并图中单张源图最大宽度（px）")
+    ap.add_argument("--max-cell-h", type=int, default=800, help="合并图中单张源图最大高度（px）")
+    ap.add_argument("--cols", type=int, default=None, help="合并图网格列数（默认 ≤2 张单列、3 张以上两列）")
     ap.add_argument("--dry-run", action="store_true", help="只看会输出哪些篇，不写文件")
     args = ap.parse_args(argv)
 
@@ -385,12 +463,19 @@ def main(argv: list[str] | None = None) -> int:
     issue = issue_dir.name
     out_root = Path(args.out)
 
+    if not args.dry_run:
+        # 整体重建：清掉历史残留合并图再重跑（原为 CLAUDE.md 手工删除约定，现代码化）
+        shutil.rmtree(out_root, ignore_errors=True)
+        out_root.mkdir(parents=True, exist_ok=True)
+
     cfg = ScoringConfig()
     results = build_material(Path(args.pub_dir), out_root, issue_dir=issue_dir,
-                             sleuths=cfg.sleuths, dry_run=args.dry_run)
+                             sleuths=cfg.sleuths, dry_run=args.dry_run,
+                             max_images=args.max_images, max_cell_w=args.max_cell_w,
+                             max_cell_h=args.max_cell_h, cols=args.cols)
     if not args.dry_run:
         (out_root / "index.md").write_text(_index_md(issue, results), encoding="utf-8")
-    n_img = sum(1 for r in results if r["first_path"] or r["sleuth_path"] or r["author_path"])
+    n_img = sum(1 for r in results if r["first_paths"] or r["sleuth_paths"] or r["author_paths"])
     suffix = f" → {out_root}" if not args.dry_run else "（dry-run）"
     print(f"material done: {len(results)} papers with material, {n_img} with merged images{suffix}",
           flush=True)

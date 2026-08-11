@@ -4,8 +4,9 @@
     # 每日捕获（服务器 cron）：记录 /api/recent/from/{0..400} 的 pubpeer_id
     python3 -m crawler.crawl capture
 
-    # 回访：抓捕获过的文章页，提取完整评论（--limit 可分批续跑）
+    # 回访：抓捕获过的文章页，提取完整评论（--limit 可分批续跑；--window 只回访首现窗口）
     python3 -m crawler.crawl revisit --limit 50
+    python3 -m crawler.crawl revisit --window 10 3    # 只回访 captured_at∈[8.1,8.8) 的候选
 
 设计：
     feed 只能看到最近约 3 天评论动态 → 捕获记录 pubpeer_id；
@@ -50,11 +51,18 @@ def cmd_capture(args: argparse.Namespace, client: PubPeerClient, store: Store) -
 
 def cmd_revisit(args: argparse.Namespace, client: PubPeerClient, store: Store) -> int:
     now = dates.utcnow()
-    since = dates.to_iso(now - timedelta(days=args.revisit_days))
+    if args.window:
+        # 首现窗口：只回访 captured_at∈[now-D1, now-D2) 的文章（如 --window 10 3 = 8.1-8.7 期）
+        since = dates.to_iso(now - timedelta(days=args.window[0]))
+        until = dates.to_iso(now - timedelta(days=args.window[1]))
+    else:
+        since = dates.to_iso(now - timedelta(days=args.revisit_days))
+        until = None
     pending = store.captures_for_revisit(
-        since=since, limit=args.limit, force=args.force, min_comments=args.min_comments,
+        since=since, until=until, limit=args.limit, force=args.force, min_comments=args.min_comments,
     )
-    print(f"revisit: {len(pending)} captures to revisit (since {since})", flush=True)
+    print(f"revisit: {len(pending)} captures to revisit "
+          f"(since {since}{', until ' + until if until else ''})", flush=True)
 
     n_ok = n_skip = n_comments = 0
     for rec in pending:
@@ -95,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("revisit", help="回访捕获过的文章页，提取评论")
     p.add_argument("--revisit-days", type=int, default=7,
                    help="回访 >=N 天前捕获的文章（默认7）")
+    p.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
+                   help="只回访首现窗口 captured_at∈[now-D1,now-D2) 的文章（覆盖 --revisit-days；"
+                        "如 --window 10 3 = 8.1-8.7 期候选）")
     p.add_argument("--limit", type=int, default=None, help="本次最多回访条数（可分批续跑）")
     p.add_argument("--min-comments", type=int, default=0,
                    help="只回访评论数 >=N 的文章（默认0不过滤）")

@@ -1,7 +1,9 @@
 """排版：把阶段B 输出的周报草稿 md 变成成品（纯离线，手动流程也用）。
 
-- 把草稿里引用的图片统一成扁平 `<pid>_<kind>.png`（裸文件名 `first_merged.png`
+- 把草稿里引用的图片统一成扁平 `<pid>_<flat>.png`（裸文件名 `first_merged.png`
   也会重写为 `<pid>_first_merged.png`），并把图从 material/<pid>/ 复制到与 md 同目录。
+  同一类合并图可能有多张（`<pid>_first_merged.png` / `<pid>_first_merged_2.png`），
+  序号后缀 `_N` 原样保留：material 里找 `first_merged_2.png`、成品写 `<pid>_first_merged_2.png`。
 - 校验每张图：alt 是否带 `PID:<pid>` 前缀、material 里是否真存在；缺失/无标签打印告警并原样保留。
 - 输出 `weekly/<issue>.md`（md 与图同目录，baoyu 以 md 目录为 baseDir 即可解析）。
 """
@@ -28,18 +30,23 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", s.lower())
 
 
-def _pid_from_name(name: str) -> str | None:
-    """从 `<pid>_<kind>.png` 里抽出 pid；裸文件名返回 None。"""
+def _split_name(name: str) -> tuple[str | None, str | None]:
+    """拆 `<pid>_<flat>.png` → (pid, flat)；flat 是 material 里的裸文件名（如 first_merged / first_merged_2）。
+
+    裸文件名（无 pid 前缀）时 pid 为 None、flat 为原名。
+    """
     m = re.match(r"^([0-9A-Fa-f]{16,})_(.+?)\.png$", name)
-    return m.group(1) if m else None
+    if m:
+        return m.group(1), m.group(2)
+    if name.endswith(".png"):
+        return None, name[:-4]
+    return None, None
 
 
-def _kind_from_name(name: str) -> str | None:
-    stem = name[:-4] if name.endswith(".png") else name
-    for k in KINDS:
-        if stem == k or stem.endswith(f"_{k}"):
-            return k
-    return None
+def _base_kind(flat: str) -> str | None:
+    """flat 的基础种类（去 `_N` 序号）：first_merged_2 → first_merged；未知返回 None。"""
+    stem = re.sub(r"_\d+$", "", flat)
+    return stem if stem in KINDS else None
 
 
 def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
@@ -57,23 +64,23 @@ def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
         if not name.lower().endswith(".png"):
             return match.group(0)
         pid_alt = (PID_TAG_RE.search(alt).group(1) if PID_TAG_RE.search(alt) else None)
-        pid_name = _pid_from_name(name)
-        kind = _kind_from_name(name)
+        pid_name, flat = _split_name(name)
         if pid_alt and pid_name and pid_alt != pid_name:
             warnings.append(f"alt PID({pid_alt}) 与文件名 pid({pid_name}) 不一致：{name}")
         pid = pid_alt or pid_name
         if not pid:
             warnings.append(f"无法解析 pid（alt 缺 PID: 标签）：{alt} → {name}")
             return match.group(0)
-        if not kind:
+        base = _base_kind(flat or name)
+        if not base:
             warnings.append(f"无法识别图片种类（应为 first/author/sleuth_merged）：{name}")
             return match.group(0)
-        src = mat / pid / f"{kind}.png"
+        src = mat / pid / f"{flat}.png"
         if not src.exists():
-            warnings.append(f"material 中不存在 {pid}/{kind}.png（被引用了：{name}）")
+            warnings.append(f"material 中不存在 {pid}/{flat}.png（被引用了：{name}）")
             return match.group(0)
-        target = f"{pid}_{kind}.png"
-        if kind == "sleuth_merged" and any(key in _norm(alt) for key in SLEUTH_KEYS):
+        target = f"{pid}_{flat}.png"
+        if base == "sleuth_merged" and any(key in _norm(alt) for key in SLEUTH_KEYS):
             warnings.append(f"其他评论者补充图 alt 疑似含打假人姓名（违反统一口径）：{alt}")
         if not dry_run:
             out.mkdir(parents=True, exist_ok=True)

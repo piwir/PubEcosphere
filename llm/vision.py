@@ -2,10 +2,12 @@
 
 与手动流程输入一致：md 顶部补 `分类`/`IF` 行（取自 manifest.json），
 图片按 first/author/sleuth 顺序用 base64 data-URI 发送，文件名以文本标签给出。
+同一类合并图可能有多张（material 超限拆分：first_merged.png / first_merged_2.png …），全部发送。
 """
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -19,15 +21,41 @@ KIND_LABEL = {
 }
 
 
+def merged_variants(pid_dir: str | Path, kind: str) -> list[Path]:
+    """某类合并图在该篇目录里实际存在的全部变体：{kind}.png、{kind}_2.png、{kind}_3.png…。
+
+    序号连续递增（material 拆分命名），断档即止。
+    """
+    d = Path(pid_dir)
+    out: list[Path] = []
+    for i in range(1, 100):
+        name = f"{kind}.png" if i == 1 else f"{kind}_{i}.png"
+        p = d / name
+        if p.exists():
+            out.append(p)
+        elif i > 1:
+            break
+    return out
+
+
 def collect_images(pid_dir: str | Path) -> list[Path]:
-    """返回该篇目录里实际存在的合并图（按 first/author/sleuth 顺序）。"""
+    """返回该篇目录里实际存在的合并图（按 first/author/sleuth 顺序，同类多张按序号）。"""
     d = Path(pid_dir)
     out: list[Path] = []
     for kind in IMAGE_KINDS:
-        p = d / f"{kind}.png"
-        if p.exists():
-            out.append(p)
+        out.extend(merged_variants(d, kind))
     return out
+
+
+def kind_label(name: str) -> str:
+    """按文件名给图片类别标签：first_merged.png → 质疑人证据图；first_merged_2.png → 质疑人证据图（第 2 张）。"""
+    for kind, label in KIND_LABEL.items():
+        if name == f"{kind}.png":
+            return label
+        m = re.match(rf"^{re.escape(kind)}_(\d+)\.png$", name)
+        if m:
+            return f"{label}（第 {m.group(1)} 张）"
+    return "图片"
 
 
 def load_manifest(manifest: str | Path | dict | None) -> dict[str, dict]:
@@ -65,12 +93,7 @@ def build_vision_messages(md_text: str, image_paths: Iterable[str | Path],
     for path in image_paths:
         p = Path(path)
         name = p.name
-        kind = "unknown"
-        for k, label in KIND_LABEL.items():
-            if name.endswith(f"_{k}.png") or name == f"{k}.png":
-                kind = f"（{label}）"
-                break
-        content.append({"type": "text", "text": f"【图片 {name}{kind}】"})
+        content.append({"type": "text", "text": f"【图片 {name}（{kind_label(name)}）】"})
         content.append(image_part_data_uri(p))
     return [
         {"role": "system", "content": prompt},

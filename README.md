@@ -26,8 +26,7 @@ capture（每日捕获 feed）→ revisit（≥7 天后回访评论线程）→ 
 ## 快速开始
 
 ```bash
-# 环境
-conda env create -f environment.yml && conda activate pubecosphere
+conda activate pubecosphere
 
 # 1. 每日捕获 feed（服务器用 cron 常驻）
 python -m crawler.crawl --db data/pubpeer.db capture
@@ -39,28 +38,48 @@ python -m crawler.crawl --db data/pubpeer.db revisit --limit 50
 python -m crawler.export --db data/pubpeer.db --output output
 
 # 4. 两阶段打分（--stage1-only 只粗筛；--include-published 强制含已发布）
-python -m scoring.pipeline rank --db data/pubpeer.db
+#    --issue 把报告写到本期 score/；--window/--window-field 按日期基准过滤候选
+python -m scoring.pipeline rank --db data/pubpeer.db --issue 1 --window 10 3 --window-field captured_at
 
-# 5. 每类选篇打包本期素材（--dry-run 先看选什么；测试期用 --issue=-1）
-python -m scoring.pipeline pick --db data/pubpeer.db --issue=-1 --dry-run
-python -m scoring.pipeline pick --db data/pubpeer.db --issue=-1
+# 5. 每类选篇打包本期素材（--dry-run 先看选什么，确认分数线后正式落）
+python -m scoring.pipeline pick --db data/pubpeer.db --issue 1 --dry-run
+python -m scoring.pipeline pick --db data/pubpeer.db --issue 1
 
-# 6. 图材合并（每篇至多 3 张合并图：first / author / sleuth）
-python -m scoring.material --pub-dir output/issue/-1/pub --out output/issue/-1/material
+# 6. 图材合并（每张合并图至多 4 张源图，超限自动拆 first_merged_2.png 等）
+python -m scoring.material --pub-dir output/issue/1/pub --out output/issue/1/material
 ```
 
 ## LLM 周报生成
 
-当前**手动上传**（贴提示词 + 上传扁平素材），`llm/` 为预留 API 接入、默认不启用。方案与提示词见 `docs/llm-scheme.md` 与 `docs/prompts/`（提示词随仓库提交）。
+`llm/` 提供两条路径，均走 OpenAI 兼容 `chat/completions`（默认 DeepSeek）：
+
+- **单模型路径（推荐）**：`python -m llm generate` 用**同一个模型**完成提取 + 写稿（无多模态，图片描述来自评论者配图时的原话）。
+- **多模态双模型路径（预留）**：vision 提取 + writer 写稿，需要多模态模型。
+
+提示词见 `docs/prompts/`（随仓库提交）；方案细节见 `docs/llm-scheme.md`。
+
+### API 配置
+
+密钥只走环境变量 / 仓库根 `.env`（**绝不硬编码、不提交**）。把 `.env.example` 复制为 `.env` 填写：
+
+```bash
+cp .env.example .env        # 编辑填入 PUBECOSPHERE_LLM_API_KEY=sk-…
+```
+
+单模型路径：`PUBECOSPHERE_LLM_MODEL`（默认 deepseek-v4-flash）、`PUBECOSPHERE_LLM_MAX_TOKENS`（默认顶满模型上限，不人为限流）。
 
 ```bash
 # 摊平上传文件夹（无子目录，方便对话平台框选上传）
-python -m llm flatten --material-dir output/issue/-1/material \
-    --upload-dir output/issue/-1/upload --manifest output/issue/-1/manifest.json
+python -m llm flatten --material-dir output/issue/1/material \
+    --upload-dir output/issue/1/upload --manifest output/issue/1/manifest.json
+
+# 单模型端到端：提取 + 写稿（同一模型；--dry-run 只打印消息不联网；--assemble 顺带排版）
+python -m llm generate --material-dir output/issue/1/material \
+    --weekly-dir output/issue/1/weekly --issue 1
 
 # 排版：草稿 → 成品 md + 图复制（md 与图同目录，供微信 HTML 转换）
-python -m llm assemble --material-dir output/issue/-1/material \
-    --weekly-dir output/issue/-1/weekly --issue -1
+python -m llm assemble --material-dir output/issue/1/material \
+    --weekly-dir output/issue/1/weekly --issue 1
 
 # 自检（离线，不联网不调模型）
 python -m llm check && python -m llm selftest
@@ -84,7 +103,7 @@ PubEcosphere/
 
 | 文档 | 内容 |
 | --- | --- |
-| `docs/prompts/` | 多模态提取 + 写稿 两套提示词 |
+| `docs/prompts/` | 多模态提取 + 文本提取 + 写稿 三套提示词 |
 
 
 ## 免责声明

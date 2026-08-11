@@ -1,6 +1,6 @@
-"""`python -m llm` 入口：check / selftest / flatten / vision / writer / assemble。
+"""`python -m llm` 入口：check / selftest / flatten / vision / writer / assemble / generate。
 
-默认不联网：vision / writer 只有不带 --dry-run 时才真正调 API。
+默认不联网：vision / writer / generate 只有不带 --dry-run 时才真正调 API。
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from .assemble import assemble_weekly
 from .client import LLMClient
 from .config import LLMConfig
 from .flatten import flatten_material, print_flatten_summary
+from .generate import generate_issue
 from .prompts import load_prompt, validate_prompt_schema
 from .vision import collect_images, load_manifest, prepend_metadata, build_vision_messages, run_vision
 from .writer import build_writer_messages, run_writer
@@ -25,7 +26,7 @@ def cmd_check(args) -> int:
         for p in problems:
             print(f"  - {p}")
         return 1
-    print("提示词校验通过：两文件存在，八节齐全。")
+    print("提示词校验通过：三文件存在，八节齐全。")
     return 0
 
 
@@ -48,7 +49,8 @@ def cmd_flatten(args) -> int:
 
 def cmd_vision(args) -> int:
     pid_dir = Path(args.pid_dir)
-    prompt = load_prompt("vision")
+    config = LLMConfig.from_env()
+    prompt = load_prompt("vision", config.prompt_dir)
     meta = load_manifest(args.manifest).get(pid_dir.name)
     md_text = (pid_dir / f"{pid_dir.name}.md").read_text(encoding="utf-8")
     if meta:
@@ -57,7 +59,6 @@ def cmd_vision(args) -> int:
     if args.dry_run:
         print(json.dumps(messages, ensure_ascii=False, indent=2))
         return 0
-    config = LLMConfig.from_env()
     if not config.api_key:
         print("未设置 PUBECOSPHERE_LLM_API_KEY，无法调用 API（可加 --dry-run 只看消息）",
               file=sys.stderr)
@@ -68,14 +69,14 @@ def cmd_vision(args) -> int:
 
 
 def cmd_writer(args) -> int:
-    prompt = load_prompt("writer")
+    config = LLMConfig.from_env()
+    prompt = load_prompt("writer", config.prompt_dir)
     stage_a = Path(args.stage_a).read_text(encoding="utf-8")
     messages = build_writer_messages(stage_a, prompt)
     if args.dry_run:
         print(messages[1]["content"][:2000])
         print("…（dry-run 仅展示 user 前缀，完整消息见代码）")
         return 0
-    config = LLMConfig.from_env()
     if not config.api_key:
         print("未设置 PUBECOSPHERE_LLM_API_KEY，无法调用 API（可加 --dry-run 只看消息）",
               file=sys.stderr)
@@ -108,11 +109,31 @@ def cmd_assemble(args) -> int:
     return 0
 
 
+def cmd_generate(args) -> int:
+    """单模型端到端：提取 + 写稿（同一模型）；--dry-run 只打印消息，不联网。"""
+    config = LLMConfig.from_env()
+    if not config.api_key and not args.dry_run:
+        print("未设置 PUBECOSPHERE_LLM_API_KEY，无法调用 API（可加 --dry-run 只看消息）",
+              file=sys.stderr)
+        return 1
+    client = LLMClient(config) if (config.api_key and not args.dry_run) else None
+    warnings = generate_issue(
+        args.material_dir, args.weekly_dir, issue=args.issue,
+        client=client, config=config, model=args.model,
+        limit=args.limit, pid=args.pid, manifest=args.manifest,
+        assemble=args.assemble, dry_run=args.dry_run)
+    for w in warnings:
+        print(f"  [告警] {w}")
+    if args.dry_run:
+        print("[dry-run] 未调用 API、未写盘。")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python -m llm", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("check", help="校验 docs/prompts 两文件与八节")
+    sub.add_parser("check", help="校验 docs/prompts 三文件与八节")
     sub.add_parser("selftest", help="离线自测")
 
     p = sub.add_parser("flatten", help="摊平 material → upload 扁平上传文件夹")
@@ -137,6 +158,17 @@ def main(argv=None) -> int:
     p.add_argument("--draft", type=Path, default=None)
     p.add_argument("--dry-run", action="store_true")
 
+    p = sub.add_parser("generate", help="单模型端到端：提取 + 写稿（同一模型，--dry-run 只打印消息）")
+    p.add_argument("--material-dir", required=True, type=Path)
+    p.add_argument("--weekly-dir", required=True, type=Path)
+    p.add_argument("--issue", default="")
+    p.add_argument("--model", default=None, help="覆盖默认单模型（PUBECOSPHERE_LLM_MODEL）")
+    p.add_argument("--manifest", type=Path, default=None)
+    p.add_argument("--limit", type=int, default=None, help="只处理前 N 篇")
+    p.add_argument("--pid", default=None, help="只处理指定 pid 一篇")
+    p.add_argument("--assemble", action="store_true", help="写稿后自动排版成品 md + 复制图片")
+    p.add_argument("--dry-run", action="store_true", help="只打印将发送的消息，不联网、不写盘")
+
     args = parser.parse_args(argv)
     handlers = {
         "check": cmd_check,
@@ -145,6 +177,7 @@ def main(argv=None) -> int:
         "vision": cmd_vision,
         "writer": cmd_writer,
         "assemble": cmd_assemble,
+        "generate": cmd_generate,
     }
     return handlers[args.cmd](args)
 

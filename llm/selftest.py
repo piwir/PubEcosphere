@@ -8,6 +8,8 @@
 - flatten：临时目录断言扁平命名（含 `_2` 变体）。
 - assemble：合成周报断言重写（含 _N 源图查找）与缺失/统一口径告警。
 - generate：假 transport 断言 stageA_combined 归集 + 草稿写出。
+- polish_html：上下标转换 / URL·<a> 保护 / 幂等。
+- date_range：WEEK_START + 期号推算数据收集窗口。
 所有图片均为合成 fixture（不依赖真实 output/ 目录，干净可移植）。
 """
 from __future__ import annotations
@@ -23,7 +25,8 @@ from PIL import Image
 from .assemble import assemble_weekly
 from .client import LLMConfig, LLMClient, LLMError, default_transport, image_part_data_uri
 from .flatten import flatten_material
-from .generate import generate_issue, material_papers
+from .generate import generate_issue, issue_header, material_papers, weekly_date_range
+from .polish_html import polish_html, style_footer_links
 from .prompts import load_prompt, validate_prompt_schema
 from .vision import build_vision_messages, collect_images, prepend_metadata
 from .writer import build_writer_messages
@@ -293,6 +296,72 @@ def _test_generate() -> tuple[bool, str]:
         return True, "generate 假 transport：extract+writer 各一次 / stageA 归集 / 草稿 / assemble 正确"
 
 
+def _test_polish_html() -> tuple[bool, str]:
+    """polish_html：上标/下标转换、URL·DOI·<a> 保护、实体回放、幂等。"""
+    src = (
+        "Foxp3^(DTR-GFP/y) 与 CD4^t，数量级 10^6 与 2.5×10^6，变量 w_1,...,w_n 与 _{ij}；"
+        "链接 https://example.com/a_b 与 DOI 10.1234/test_1；"
+        '<a href="https://example.com/x^y">链接^内容</a>；&amp; 实体。'
+    )
+    out = polish_html(src)
+    SUP = 'style="font-size:75%; vertical-align:super; line-height:1;"'
+    SUB = 'style="font-size:75%; vertical-align:sub; line-height:1;"'
+    assert f'Foxp3<sup {SUP}>DTR-GFP/y</sup>' in out
+    assert f"CD4<sup {SUP}>t</sup>" in out
+    assert f"10<sup {SUP}>6</sup>" in out and f"2.5×10<sup {SUP}>6</sup>" in out
+    assert f"w<sub {SUB}>1</sub>" in out and f"w<sub {SUB}>n</sub>" in out and f"<sub {SUB}>ij</sub>" in out
+    assert "https://example.com/a_b" in out, "URL 内的 _ 被误转"          # URL 保护
+    assert "10.1234/test_1" in out, "DOI 内的 _ 被误转"                   # DOI 保护
+    assert "链接^内容" in out, "a 标签内文本被改写"                        # <a> 保护
+    assert "&amp;" in out, "字符实体被破坏"
+    assert polish_html(out) == out, "非幂等"                              # 幂等
+    return True, "polish_html：上下标转换 / URL·DOI·a 保护 / 实体 / 幂等正确"
+
+
+def _test_footer_style() -> tuple[bool, str]:
+    """style_footer_links：页脚 PubPeer/DOI 链接 p 注入英文标题同款小字紧排，幂等。"""
+    src = (
+        '<section class="container" style="font-family: x; font-size: 16px; line-height: 1.75;">'
+        '<h3 class="h3" style="line-height: 1.5;">中文标题</h3>'
+        '<blockquote class="blockquote"><p class="p" style="display: block; font-size: 1em;'
+        ' letter-spacing: 0.1em; color: #3f3f3f; margin: 0;">英文标题</p></blockquote>'
+        '<p class="p"><strong>现状</strong>：未提及撤稿或更正。</p>'
+        '<blockquote class="blockquote"><p class="p" style="display: block; font-size: 1em;'
+        ' letter-spacing: 0.1em; color: #3f3f3f; margin: 0;">PubPeer 讨论：'
+        "https://pubpeer.com/publications/ABC<br>DOI：https://doi.org/10.1234/abc</p></blockquote>"
+        "</section>"
+    )
+    out = style_footer_links(src)
+    # 页脚 p：小字紧排注入，其它属性保留
+    assert (
+        'style="font-size: calc(16px * 0.85); line-height: 1.3; display: block;'
+        ' letter-spacing: 0.1em; color: #3f3f3f; margin: 0;">PubPeer 讨论：' in out
+    ), out
+    assert out.count("PubPeer 讨论：") == 1
+    # 英文标题 p 不受影响（只命中以 PubPeer 讨论开头的 p）
+    assert out.count("font-size: 1em") == 1, "英文标题 p 被误改"
+    # 幂等
+    assert style_footer_links(out) == out, "非幂等"
+    return True, "style_footer_links：页脚小字紧排 / 只命中页脚 / 幂等正确"
+
+
+def _test_date_range() -> tuple[bool, str]:
+    """weekly_date_range：默认 WEEK_START=2026-08-03，每期 +7 天，格式 M.DD–M.DD。"""
+    assert weekly_date_range(1) == "8.03–8.09", weekly_date_range(1)
+    assert weekly_date_range(2) == "8.10–8.16", weekly_date_range(2)
+    assert weekly_date_range(3, "2026-01-05") == "1.19–1.25", weekly_date_range(3, "2026-01-05")
+    return True, "date_range：期号→7 天窗口、跨月格式、起始覆盖正确"
+
+
+def _test_issue_header() -> tuple[bool, str]:
+    """issue_header：str/int 期号都注入 `数据收集：`；空/-1/0 不注入。"""
+    assert issue_header("1", "2026-08-12") == "期号：1（run 2026-08-12）\n数据收集：8.03–8.09", issue_header("1", "2026-08-12")
+    assert issue_header(1, "2026-08-12") == "期号：1（run 2026-08-12）\n数据收集：8.03–8.09", issue_header(1, "2026-08-12")
+    assert issue_header("-1", "2026-08-12") == "期号：-1（run 2026-08-12）", issue_header("-1", "2026-08-12")
+    assert issue_header("", "2026-08-12") == "期号：-（run 2026-08-12）", issue_header("", "2026-08-12")
+    return True, "issue_header：str/int 均注入、测试期号不注入"
+
+
 TESTS = [
     ("check 提示词八节", _test_check),
     ("client POST body 结构", _test_client_structure),
@@ -303,6 +372,10 @@ TESTS = [
     ("writer 纯文本结构", _test_writer),
     ("flatten + assemble", _test_flatten_assemble),
     ("generate 单模型离线", _test_generate),
+    ("polish_html 上下标", _test_polish_html),
+    ("footer 页脚小字紧排", _test_footer_style),
+    ("date_range 日期窗口", _test_date_range),
+    ("issue_header 头部注入", _test_issue_header),
 ]
 
 

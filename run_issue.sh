@@ -10,6 +10,7 @@
 #   MIN_SCORE      pick 选稿门槛（默认 0.55，需用户拍板）
 #   RUN_CAPTURE    1 = 先跑每日 capture（默认 0：capture 是每日独立操作）
 #   DRY_RUN        1 = pick 只预览不下载，看完即停（默认 0 全流程）
+#   WEEK_START     本期数据收集起始日 YYYY-MM-DD（默认 2026-08-03；每期 +7 天，注入导语）
 #   BUN            baoyu 运行时（默认 ~/.bun/bin/bun；缺失时自动用 npx -y bun 回退）
 #
 # 用法：ISSUE=1 ./run_issue.sh    或   DRY_RUN=1 ISSUE=1 ./run_issue.sh
@@ -23,6 +24,7 @@ WINDOW_FIELD="${WINDOW_FIELD:-captured_at}"
 MIN_SCORE="${MIN_SCORE:-0.55}"
 RUN_CAPTURE="${RUN_CAPTURE:-0}"
 DRY_RUN="${DRY_RUN:-0}"
+WEEK_START="${WEEK_START:-2026-08-03}"
 BUN="${BUN:-$HOME/.bun/bin/bun}"
 BAOYU_MAIN="${BAOYU_MAIN:-$HOME/.claude/skills/baoyu-markdown-to-html/scripts/main.ts}"
 
@@ -69,6 +71,8 @@ python -m llm flatten --material-dir "$OUT_ROOT/material" --upload-dir "$OUT_ROO
     --manifest "$OUT_ROOT/manifest.json"
 
 # 6) 单模型提取 + 写稿 + 排版成品（--assemble 顺带跑 assemble）
+#    WEEK_START 透传给 generate：头部 `数据收集：M.DD–M.DD` → 导语第一句
+export WEEK_START
 echo "==> [7/9] generate --assemble（提取+写稿+排版 → $WEEKLY/）"
 python -m llm generate --material-dir "$OUT_ROOT/material" --weekly-dir "$WEEKLY" \
     --issue "$ISSUE" --assemble
@@ -82,6 +86,14 @@ else
     BAOYU_RUN=(npx -y bun)
 fi
 "${BAOYU_RUN[@]}" "$BAOYU_MAIN" "$WEEKLY/$ISSUE.md" --theme default --keep-title
+
+# 7.3) 周报 HTML 后处理（确定性、幂等）：
+#      a) 数学上下标（LaTeX 残记 `^()`/`_x` → <sup>/<sub>，微信不认 KaTeX）；
+#      b) 卡片页脚「PubPeer 讨论 + DOI」blockquote 的 <p> 注入与英文标题一致的
+#         小字紧排（font-size calc(Npx*0.85)、line-height 1.3）。
+#      b 不能用 CSS：页脚 blockquote 在 `**现状**` 段落后、无相邻选择器可命中，juice 不支持 :has()
+echo "==> [8.3/9] polish_html（上下标 sup/sub + 页脚链接小字紧排）"
+python -m llm.polish_html "$WEEKLY/$ISSUE.html"
 
 # 7.5) 修 baoyu 剥掉的 blockquote 内 GitHub 链接（简介/结语固定块用 [..](..) 语法，
 #       baoyu 在 blockquote 里会把它剥成纯文本）→ 包回 <a href> 保持可点击

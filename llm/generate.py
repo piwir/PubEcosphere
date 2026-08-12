@@ -10,9 +10,10 @@
 """
 from __future__ import annotations
 
+import os
 import shutil
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -51,6 +52,30 @@ def build_extract_messages(papers: Iterable[str | Path], prompt: str,
 def _join_blocks(blocks: Iterable[str]) -> str:
     """多个提取块归集成 stageA_combined；块间 `---` 分隔，去首尾空行。"""
     return "\n\n---\n\n".join(b.strip() for b in blocks if b and b.strip())
+
+
+def issue_header(issue: str | int, run_id: str, week_start: str | None = None) -> str:
+    """写稿输入顶部头部：`期号：…（run …）`；正整数期号追加 `数据收集：M.DD–M.DD`。
+
+    issue 可能是 CLI 传来的字符串（"--issue 1"）也可能是 int；空/0/负值不注入
+    （`--issue -1` 测试期避免展示无意义的过去窗口）。"""
+    header = f"期号：{issue or '-'}（run {run_id}）"
+    num = int(issue) if str(issue).lstrip("-").isdigit() else None
+    if num and num > 0:
+        header += f"\n数据收集：{weekly_date_range(num, week_start)}"
+    return header
+
+
+def weekly_date_range(issue: int, week_start: str | None = None) -> str:
+    """按 WEEK_START 环境变量（默认 2026-08-03）+ 期号推算本期 7 天数据收集窗口。
+
+    起始 = week_start + (issue-1)*7，结束 = 起始 + 6 天；格式 `M.DD–M.DD`（如 `8.03–8.09`）。
+    导语第一句的 `（素材收集 <FROM>–<TO>）` 由写稿模型从该值转抄。
+    """
+    base = date.fromisoformat(week_start or os.environ.get("WEEK_START", "2026-08-03"))
+    start = base + timedelta(days=(issue - 1) * 7)
+    end = start + timedelta(days=6)
+    return f"{start.month}.{start.day:02d}–{end.month}.{end.day:02d}"
 
 
 def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str = "",
@@ -102,7 +127,9 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
     run_id = date.today().isoformat()
     # 头部 `期号：…（run …）` 与写稿提示词契约一致（提示词从输入顶部 `期号：` 行取期号），
     # 同时写进 stageA_combined.md 与写稿 user 消息——修「issue 未知」标题。
-    header = f"期号：{issue or '-'}（run {run_id}）"
+    # 正整数期号追加 `数据收集：M.DD–M.DD`（WEEK_START 环境变量 + 期号推算），供导语第一句转抄；
+    # `--issue -1` 测试期不注入，避免展示无意义的过去窗口（issue 可能是 str 或 int，见 issue_header）。
+    header = issue_header(issue, run_id)
     combined = f"{header}\n\n{blocks}"
 
     # 归集写盘（供人工审核阶段A）

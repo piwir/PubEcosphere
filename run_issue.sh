@@ -10,7 +10,7 @@
 #   MIN_SCORE      pick 选稿门槛（默认 0.55，需用户拍板）
 #   RUN_CAPTURE    1 = 先跑每日 capture（默认 0：capture 是每日独立操作）
 #   DRY_RUN        1 = pick 只预览不下载，看完即停（默认 0 全流程）
-#   BUN            baoyu 运行时（默认 ~/.bun/bin/bun）
+#   BUN            baoyu 运行时（默认 ~/.bun/bin/bun；缺失时自动用 npx -y bun 回退）
 #
 # 用法：ISSUE=1 ./run_issue.sh    或   DRY_RUN=1 ISSUE=1 ./run_issue.sh
 set -euo pipefail
@@ -75,15 +75,40 @@ python -m llm generate --material-dir "$OUT_ROOT/material" --weekly-dir "$WEEKLY
 
 # 7) md → 微信兼容 HTML（--keep-title 保留主标题 `# PubPeer 周报 · issue N`）
 echo "==> [8/9] baoyu md → html"
-if [[ ! -x "$BUN" ]]; then
-    echo "未找到 bun（$BUN）。请安装 bun 或设置 BUN=… 覆盖。" >&2
-    exit 1
+if [[ -x "$BUN" ]]; then
+    BAOYU_RUN=("$BUN")
+else
+    echo "未找到 bun（$BUN），改用 npx -y bun 回退。"
+    BAOYU_RUN=(npx -y bun)
 fi
-"$BUN" "$BAOYU_MAIN" "$WEEKLY/$ISSUE.md" --theme default --keep-title
+"${BAOYU_RUN[@]}" "$BAOYU_MAIN" "$WEEKLY/$ISSUE.md" --theme default --keep-title
 
-# 8) 图片 base64 内联（微信手动粘贴专用）
+# 7.5) 修 baoyu 剥掉的 blockquote 内 GitHub 链接（简介/结语固定块用 [..](..) 语法，
+#       baoyu 在 blockquote 里会把它剥成纯文本）→ 包回 <a href> 保持可点击
+echo "==> [8.5/9] 修复 GitHub 链接（blockquote 内被 baoyu 剥成纯文本）"
+python - <<PY
+import re
+p = "output/issue/$ISSUE/weekly/$ISSUE.html"
+html = open(p, encoding="utf-8").read()
+old = "GitHub：https://github.com/piwir/PubEcosphere"
+new = 'GitHub：<a href="https://github.com/piwir/PubEcosphere">https://github.com/piwir/PubEcosphere</a>'
+n = html.count(old)
+html = html.replace(old, new)
+open(p, "w", encoding="utf-8").write(html)
+print(f"  修复 {n} 处 GitHub 链接")
+PY
+
+# 8) 图片 base64 内联（微信手动粘贴专用；同时清掉 baoyu 的 data-local-path 绝对路径残留）
 echo "==> [9/9] inline_images（→ $WEEKLY/$ISSUE-base64.html）"
 python -m llm.inline_images "$WEEKLY/$ISSUE.html"
+python - <<PY
+import re
+p = "output/issue/$ISSUE/weekly/$ISSUE-base64.html"
+html = open(p, encoding="utf-8").read()
+html = re.sub(r' data-local-path="[^"]*"', "", html)
+open(p, "w", encoding="utf-8").write(html)
+print("  已清理 data-local-path 残留")
+PY
 
 echo
 echo "==> 完成。产物："

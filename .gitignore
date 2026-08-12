@@ -18,6 +18,7 @@ venv/
 # output
 *.log
 data/pubpeer.db
+data/pubpeer.db.bak-*
 output/
 
 # docs（仅 docs/prompts/ 下提示词随仓库提交）

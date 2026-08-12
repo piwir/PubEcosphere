@@ -288,9 +288,10 @@ def _paper_md(pid: str, meta: dict, first: Comment, sleuth: Comment | None,
     first_fig = f"（合并 {first_n_img} 张源图）" if first_n_img else "（无图）"
     sleuth_fig = f"（合并 {sleuth_n_img} 张源图）" if sleuth_n_img else ""
     author_fig = f"（合并 {author_n_img} 张源图）" if author_n_img else ""
-    lines = [
-        f"# {meta.get('title') or pid}",
-        f"- 期刊：{meta.get('journal') or '-'}",
+    lines = [f"# {meta.get('title') or pid}", f"- 期刊：{meta.get('journal') or '-'}"]
+    if meta.get("impact"):
+        lines.append(f"- IF：{meta['impact']}")
+    lines += [
         f"- DOI：{meta.get('doi') or '-'}",
         f"- PubPeer：[讨论]({pubpeer})",
         f"- 质疑人：{first.alias}（最早质疑 {first.when}，共 {first_n} 条评论）",
@@ -361,6 +362,9 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
             meta["category"] = pick["category"]
         if pick.get("final_score") is not None:
             meta["final_score"] = round(pick["final_score"], 3)
+        # 影响因子取自 manifest（如 "IF 15.6" → "15.6"），写进素材 md 供 LLM 提取后上卡片
+        if pick.get("impact"):
+            meta["impact"] = re.sub(r"^IF\s*", "", pick["impact"], flags=re.IGNORECASE).strip()
 
         result = {
             "pubpeer_id": pid, "title": meta.get("title"), "journal": meta.get("journal"),
@@ -382,6 +386,10 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
             result["first_paths"] = merge_images(first_paths, work_dir / "first_merged.png",
                                                  max_images=max_images, max_cell_w=max_cell_w,
                                                  max_cell_h=max_cell_h, cols=cols)
+            # 首位质疑人合并图 ≥2 张时不再生成打假人备用图：sleuth 位置让给首质疑人第 2 张图。
+            if len(result["first_paths"]) >= 2:
+                sleuth_comments, sleuth_imgs = [], []
+                result.update(sleuth=None, sleuth_n=0, sleuth_n_img=0)
             sleuth_paths = [imgs_on_disk[n] for n in sleuth_imgs if n in imgs_on_disk]
             result["sleuth_paths"] = merge_images(sleuth_paths, work_dir / "sleuth_merged.png",
                                                   max_images=max_images, max_cell_w=max_cell_w,

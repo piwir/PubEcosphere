@@ -186,7 +186,6 @@ def build_issue(sstore: ScoringStore, client: PubPeerClient, run_id: str, issue:
     for name in ("manifest.json", "manifest.md"):
         (issue_dir / name).unlink(missing_ok=True)
     pub_dir.mkdir(parents=True, exist_ok=True)
-    src_pub = out_root / "pub"
 
     pubs = sstore.publications_for([p["pubpeer_id"] for p in picks])
     comments = sstore.comments_for([p["pubpeer_id"] for p in picks])
@@ -200,9 +199,7 @@ def build_issue(sstore: ScoringStore, client: PubPeerClient, run_id: str, issue:
             continue
         files_dir = pub_dir / f"{pid}_files"
         files_dir.mkdir(parents=True, exist_ok=True)
-        src_files = src_pub / f"{pid}_files"
-        if src_files.exists():                       # 复用已本地化的图片，只补缺
-            shutil.copytree(src_files, files_dir, dirs_exist_ok=True)
+        # 先打分后下载：图片只在选稿阶段为当期被选论文下载，不再复用 output/pub 全量存档。
         md = render_publication(client, pub, comments.get(pid, []), files_dir)
         (files_dir / f"{pid}.md").write_text(md, encoding="utf-8")
         picked_rows.append(p)

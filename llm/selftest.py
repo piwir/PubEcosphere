@@ -263,7 +263,8 @@ def _test_generate() -> tuple[bool, str]:
         CANNED_EXTRACT = (f"## {_PID}\n\n### 元数据\n- 标题（英文）：Title\n"
                           "- 标题（中文翻译）：标题\n- 分类：测试\n\n"
                           "### 5. 可用图片清单\n- first_merged.png：（评论未描述图内内容）\n")
-        CANNED_DRAFT = (f"### 标题 · Some Journal\n\n**看点**：测试看点。\n\n"
+        CANNED_DRAFT = ("![PubPeer 周报 · PubEcosphere](intro.png)\n\n"
+                        f"### 标题 · Some Journal\n\n**看点**：测试看点。\n\n"
                         f"![PID:{_PID} 质疑人证据图]({_PID}_first_merged.png)\n")
 
         def fake_transport(url, payload, headers, timeout):
@@ -282,7 +283,7 @@ def _test_generate() -> tuple[bool, str]:
                                   assemble=True)
         assert not warnings, warnings
         combined = (weekly / "stageA_combined.md").read_text(encoding="utf-8")
-        assert "期号 -1" in combined and _PID in combined
+        assert "期号：-1" in combined and _PID in combined
         draft = (weekly / "-1_draft.md").read_text(encoding="utf-8")
         assert "测试看点" in draft
         final = (weekly / "-1.md").read_text(encoding="utf-8")

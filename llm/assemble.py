@@ -24,6 +24,11 @@ SLEUTH_KEYS = (
     "matthew schrag", "david sanders", "clare francis",
 )
 
+# 固定简介图：由写稿提示词作为固定块输出引用（intro.png），这里只把 images/intro.png 复制到
+# 与 md 同目录，供 baoyu/inline_images 解析；文案以写稿提示词为唯一来源，不经排版阶段。
+INTRO_IMG = "intro.png"          # 复制到 weekly 目录后的裸文件名
+INTRO_SRC = Path(__file__).resolve().parent.parent / "images" / "intro.png"
+
 
 def _norm(s: str) -> str:
     """小写 + 非字母数字折叠为空格（与 scoring/signals.py 的 _norm_name 同一归一化）。"""
@@ -49,6 +54,18 @@ def _base_kind(flat: str) -> str | None:
     return stem if stem in KINDS else None
 
 
+def copy_intro(out: Path) -> list[str]:
+    """把固定简介图 images/intro.png 复制到 out 目录（与 md 同目录，baoyu/inline_images 才能解析）。
+
+    简介图与文案由写稿提示词作为固定块输出，这里只补文件 + 校验。返回告警。
+    """
+    out.mkdir(parents=True, exist_ok=True)
+    if INTRO_SRC.exists():
+        shutil.copy2(INTRO_SRC, out / INTRO_IMG)
+        return []
+    return [f"{INTRO_SRC.relative_to(INTRO_SRC.parent.parent)} 缺失，简介图未复制"]
+
+
 def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
                     out_dir: str | Path, issue: str = "", dry_run: bool = False) -> list[str]:
     """重写草稿、复制图片到 out_dir，写 `{issue}.md`。返回告警列表。"""
@@ -61,6 +78,8 @@ def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
     def rewrite(match: re.Match) -> str:
         alt, link = match.group(1), match.group(2)
         name = Path(link.split()[0]).name if link else ""
+        if name == INTRO_IMG:
+            return match.group(0)   # 固定简介图，跳过处理（非评论合并图，不告警）
         if not name.lower().endswith(".png"):
             return match.group(0)
         pid_alt = (PID_TAG_RE.search(alt).group(1) if PID_TAG_RE.search(alt) else None)
@@ -90,9 +109,16 @@ def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
     rewritten = IMAGE_REF_RE.sub(rewrite, text)
     if "知名打假人" in rewritten:
         warnings.append("产出含「知名打假人」字样，违反打假人署名统一口径")
+    norm_text = _norm(rewritten)
+    for key in SLEUTH_KEYS:
+        if key in norm_text:
+            warnings.append(f"产出含打假人姓名「{key}」，违反署名统一口径（正文不应出现打假人姓名）")
     if not dry_run:
         out.mkdir(parents=True, exist_ok=True)
         out_md = out / (f"{issue}.md" if issue else draft.name.replace("_draft", ""))
+        warnings.extend(copy_intro(out))
+        if f"]({INTRO_IMG})" not in rewritten:
+            warnings.append("草稿未包含固定简介图引用（intro.png）——检查写稿提示词固定块是否被遵守")
         out_md.write_text(rewritten, encoding="utf-8")
         print(f"已写出：{out_md}")
     return warnings

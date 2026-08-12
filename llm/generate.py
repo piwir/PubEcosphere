@@ -94,11 +94,16 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
 
     print(f"阶段A：文本提取 {len(papers)} 篇 → {run_model} …", flush=True)
     extracted = client.chat(extract_msgs, model=run_model, max_tokens=cfg.max_tokens)
-    combined = _join_blocks([extracted])
-    if not combined:
+    blocks = _join_blocks([extracted])
+    if not blocks:
         warnings.append("阶段A 返回为空，无法写稿")
         print("generate: 阶段A 返回为空，中止。", file=sys.stderr)
         return warnings
+    run_id = date.today().isoformat()
+    # 头部 `期号：…（run …）` 与写稿提示词契约一致（提示词从输入顶部 `期号：` 行取期号），
+    # 同时写进 stageA_combined.md 与写稿 user 消息——修「issue 未知」标题。
+    header = f"期号：{issue or '-'}（run {run_id}）"
+    combined = f"{header}\n\n{blocks}"
 
     # 归集写盘（供人工审核阶段A）
     weekly = Path(weekly_dir)
@@ -107,11 +112,8 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
     if not (limit or pid):
         shutil.rmtree(weekly, ignore_errors=True)
     weekly.mkdir(parents=True, exist_ok=True)
-    run_id = date.today().isoformat()
     combined_path = weekly / "stageA_combined.md"
-    combined_path.write_text(
-        f"# 阶段A 冲突点提取 · 期号 {issue or '-'}（run {run_id}）\n\n{combined}\n",
-        encoding="utf-8")
+    combined_path.write_text(combined + "\n", encoding="utf-8")
     print(f"  已写出：{combined_path}")
 
     # 阶段B：写稿

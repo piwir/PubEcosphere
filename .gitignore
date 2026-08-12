@@ -20,7 +20,7 @@ venv/
 data/pubpeer.db
 output/
 
-# docs（隐私文档全部隐藏，仅 docs/prompts/ 下提示词随仓库提交）
+# docs（仅 docs/prompts/ 下提示词随仓库提交）
 docs/*
 CLAUDE.md
 !docs/prompts/

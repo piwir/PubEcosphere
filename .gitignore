@@ -9,6 +9,7 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+node_modules/
 .idea/
 .vscode/
 *.env
@@ -19,6 +20,8 @@ venv/
 *.log
 data/pubpeer.db
 data/pubpeer.db.bak-*
+*.db-wal
+*.db-shm
 output/
 
 # docs（仅 docs/prompts/ 下提示词随仓库提交）

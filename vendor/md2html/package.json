@@ -1,0 +1,44 @@
+{
+  "name": "md2html",
+  "version": "0.1.1",
+  "description": "Markdown → WeChat-friendly HTML 转换器（仓库内 vendor）",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./src/index.ts",
+  "files": [
+    "dist",
+    "src/**/*.ts",
+    "src/**/*.css",
+    "src/LICENSE",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./src/*": "./src/*"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-shared-package.mjs --external mermaid --external @antv/infographic --asset src/themes:themes --asset src/code-themes:code-themes",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "front-matter": "^4.0.2",
+    "highlight.js": "^11.11.1",
+    "juice": "^11.0.1",
+    "marked": "^15.0.6",
+    "reading-time": "^1.5.0",
+    "remark-cjk-friendly": "^1.1.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}

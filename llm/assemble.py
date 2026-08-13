@@ -5,7 +5,7 @@
   同一类合并图可能有多张（`<pid>_first_merged.png` / `<pid>_first_merged_2.png`），
   序号后缀 `_N` 原样保留：material 里找 `first_merged_2.png`、成品写 `<pid>_first_merged_2.png`。
 - 校验每张图：alt 是否带 `PID:<pid>` 前缀、material 里是否真存在；缺失/无标签打印告警并原样保留。
-- 输出 `weekly/<issue>.md`（md 与图同目录，baoyu 以 md 目录为 baseDir 即可解析）。
+- 输出 `weekly/<issue>.md`（md 与图同目录，md2html 以 md 目录为 baseDir 即可解析）。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ SLEUTH_KEYS = (
 )
 
 # 固定简介图：由写稿提示词作为固定块输出引用（intro.png），这里只把 images/intro.png 复制到
-# 与 md 同目录，供 baoyu/inline_images 解析；文案以写稿提示词为唯一来源，不经排版阶段。
+# 与 md 同目录，供 md2html/inline_images 解析；文案以写稿提示词为唯一来源，不经排版阶段。
 INTRO_IMG = "intro.png"          # 复制到 weekly 目录后的裸文件名
 INTRO_SRC = Path(__file__).resolve().parent.parent / "images" / "intro.png"
 
@@ -55,7 +55,7 @@ def _base_kind(flat: str) -> str | None:
 
 
 def copy_intro(out: Path) -> list[str]:
-    """把固定简介图 images/intro.png 复制到 out 目录（与 md 同目录，baoyu/inline_images 才能解析）。
+    """把固定简介图 images/intro.png 复制到 out 目录（与 md 同目录，md2html/inline_images 才能解析）。
 
     简介图与文案由写稿提示词作为固定块输出，这里只补文件 + 校验。返回告警。
     """

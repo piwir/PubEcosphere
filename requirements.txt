@@ -1,0 +1,4 @@
+# Python 运行时依赖（除标准库外唯一）。
+# MCP server（agent/）用纯 stdlib 手写，无需额外依赖。
+# md→html 转换器在 vendor/md2html-cli（bun/npx），见 llm/md2html.py。
+Pillow>=10

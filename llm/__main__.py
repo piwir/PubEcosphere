@@ -9,15 +9,30 @@ import json
 import sys
 from pathlib import Path
 
+from . import md2html as md2html_mod
 from . import selftest
 from .assemble import assemble_weekly
 from .client import LLMClient
 from .config import LLMConfig
 from .flatten import flatten_material, print_flatten_summary
-from .generate import generate_issue
+from .generate import GenerationBlocked, generate_issue
 from .prompts import load_prompt, validate_prompt_schema
 from .vision import collect_images, load_manifest, prepend_metadata, build_vision_messages, run_vision
 from .writer import build_writer_messages, run_writer
+
+
+def cmd_md2html(args) -> int:
+    """md → 微信兼容 HTML（仓库内 vendored 转换器，去外部 skill 依赖）。"""
+    cli: list[str] = []
+    if args.input:
+        cli.append(str(args.input))
+    if args.keep_title:
+        cli.append("--keep-title")
+    if args.theme:
+        cli += ["--theme", args.theme]
+    if args.check:
+        cli.append("--check")
+    return md2html_mod.main(cli)
 
 def cmd_check(args) -> int:
     problems = validate_prompt_schema()
@@ -117,11 +132,15 @@ def cmd_generate(args) -> int:
               file=sys.stderr)
         return 1
     client = LLMClient(config) if (config.api_key and not args.dry_run) else None
-    warnings = generate_issue(
-        args.material_dir, args.weekly_dir, issue=args.issue,
-        client=client, config=config, model=args.model,
-        limit=args.limit, pid=args.pid, manifest=args.manifest,
-        assemble=args.assemble, dry_run=args.dry_run)
+    try:
+        warnings = generate_issue(
+            args.material_dir, args.weekly_dir, issue=args.issue,
+            client=client, config=config, model=args.model,
+            limit=args.limit, pid=args.pid, manifest=args.manifest,
+            assemble=args.assemble, dry_run=args.dry_run)
+    except GenerationBlocked as exc:
+        print(f"generate 阻塞性失败：{exc}（无材料/空提取/空草稿），退出 1。", file=sys.stderr)
+        return 1
     for w in warnings:
         print(f"  [告警] {w}")
     if args.dry_run:
@@ -135,6 +154,12 @@ def main(argv=None) -> int:
 
     sub.add_parser("check", help="校验 docs/prompts 三文件与八节")
     sub.add_parser("selftest", help="离线自测")
+
+    p = sub.add_parser("md2html", help="md → 微信兼容 HTML（仓库内 vendored 转换器）")
+    p.add_argument("input", nargs="?", type=Path, default=None)
+    p.add_argument("--keep-title", action="store_true")
+    p.add_argument("--theme", default="default")
+    p.add_argument("--check", action="store_true", help="检查 bun/脚本/依赖就绪")
 
     p = sub.add_parser("flatten", help="摊平 material → upload 扁平上传文件夹")
     p.add_argument("--material-dir", required=True, type=Path)
@@ -173,6 +198,7 @@ def main(argv=None) -> int:
     handlers = {
         "check": cmd_check,
         "selftest": cmd_selftest,
+        "md2html": cmd_md2html,
         "flatten": cmd_flatten,
         "vision": cmd_vision,
         "writer": cmd_writer,

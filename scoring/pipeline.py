@@ -19,7 +19,7 @@ from crawler.client import ClientConfig, PubPeerClient
 from crawler.store import Store as CrawlerStore
 
 from . import config as config_mod
-from . import enrich, issue, report, revisit, score
+from . import enrich, issue, report, revisit, score, status as status_mod
 from .cas import CasIndex, minor_name, minor_names
 from .ccf import CcfIndex
 from .jcr import JcrIndex
@@ -155,6 +155,14 @@ def _coverage_md(cov: list[dict]) -> str:
     for name, n in minor_ctr.most_common(40):
         lines.append(f"- {name}：{n}")
     return "\n".join(lines) + "\n"
+
+
+# ---- status ---------------------------------------------------------------
+
+def cmd_status(args) -> int:
+    return status_mod.main(["--db", args.db, "--output", args.output]
+                           + ([f"--issue={args.issue}"] if getattr(args, "issue", None) is not None else [])
+                           + (["--json"] if getattr(args, "json", False) else []))
 
 
 # ---- coverage -------------------------------------------------------------
@@ -373,6 +381,11 @@ def main(argv: list[str] | None = None) -> int:
     common.add_argument("-v", "--verbose", action="store_true")
 
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("status", parents=[common], help="流水线只读状态：走到哪、下一步是什么（agent 起步工具）")
+    p.add_argument("--issue", default=None, help="只看指定期号")
+    p.add_argument("--json", action="store_true", help="输出 JSON")
+    p.set_defaults(func=cmd_status)
 
     p = sub.add_parser("coverage", parents=[common], help="期刊覆盖率报告（不评分不联网）")
     p.add_argument("--issue", default=None, help="期号标注：报告写到 output/issue/<期号>/score/（不填则写 output/score/）")

@@ -24,9 +24,15 @@ from .prompts import load_prompt
 from .vision import load_manifest, prepend_metadata
 
 
+class GenerationBlocked(Exception):
+    """阻塞性失败：无材料 / 阶段A 空 / 阶段B 空草稿。上层应返回退出码 1（纯告警仍 0）。"""
+
+
 def material_papers(material_dir: str | Path) -> list[Path]:
-    """material 下各篇目录的 <pid>.md（按 pid 排序）。"""
+    """material 下各篇目录的 <pid>.md（按 pid 排序）。目录缺失算阻塞性失败。"""
     mat = Path(material_dir)
+    if not mat.is_dir():
+        raise GenerationBlocked(f"material 目录不存在：{mat}（先跑 material 生成图材）")
     return sorted(p / f"{p.name}.md" for p in mat.iterdir() if p.is_dir() and (p / f"{p.name}.md").exists())
 
 
@@ -72,7 +78,11 @@ def weekly_date_range(issue: int, week_start: str | None = None) -> str:
     起始 = week_start + (issue-1)*7，结束 = 起始 + 6 天；格式 `M.DD–M.DD`（如 `8.03–8.09`）。
     导语第一句的 `（素材收集 <FROM>–<TO>）` 由写稿模型从该值转抄。
     """
-    base = date.fromisoformat(week_start or os.environ.get("WEEK_START", "2026-08-03"))
+    base_str = week_start or os.environ.get("WEEK_START", "2026-08-03")
+    try:
+        base = date.fromisoformat(base_str)
+    except ValueError:
+        raise GenerationBlocked(f"WEEK_START 不是合法日期（应为 ISO yyyy-mm-dd）：{base_str!r}")
     start = base + timedelta(days=(issue - 1) * 7)
     end = start + timedelta(days=6)
     return f"{start.month}.{start.day:02d}–{end.month}.{end.day:02d}"
@@ -98,7 +108,7 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
     if not papers:
         warnings.append("material 里没有可处理的论文 md")
         print("generate: 没有可处理的论文，中止。", file=sys.stderr)
-        return warnings
+        raise GenerationBlocked("无材料")
 
     cfg = config or LLMConfig.from_env()
     client = client or LLMClient(cfg)
@@ -123,7 +133,7 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
     if not blocks:
         warnings.append("阶段A 返回为空，无法写稿")
         print("generate: 阶段A 返回为空，中止。", file=sys.stderr)
-        return warnings
+        raise GenerationBlocked("阶段A 空")
     run_id = date.today().isoformat()
     # 头部 `期号：…（run …）` 与写稿提示词契约一致（提示词从输入顶部 `期号：` 行取期号），
     # 同时写进 stageA_combined.md 与写稿 user 消息——修「issue 未知」标题。
@@ -151,7 +161,7 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
     if not draft.strip():
         warnings.append("阶段B 返回空草稿")
         print("generate: 阶段B 返回为空。", file=sys.stderr)
-        return warnings
+        raise GenerationBlocked("阶段B 空草稿")
     draft_path = weekly / (f"{issue}_draft.md" if issue else "draft.md")
     draft_path.write_text(draft, encoding="utf-8")
     print(f"  已写出：{draft_path}")

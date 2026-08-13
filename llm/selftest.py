@@ -26,7 +26,7 @@ from .assemble import assemble_weekly
 from .client import LLMConfig, LLMClient, LLMError, default_transport, image_part_data_uri
 from .flatten import flatten_material
 from .generate import generate_issue, issue_header, material_papers, weekly_date_range
-from .polish_html import polish_html, style_footer_links
+from .polish_html import polish_html, repair_github_links, style_footer_links
 from .prompts import load_prompt, validate_prompt_schema
 from .vision import build_vision_messages, collect_images, prepend_metadata
 from .writer import build_writer_messages
@@ -301,6 +301,7 @@ def _test_polish_html() -> tuple[bool, str]:
     src = (
         "Foxp3^(DTR-GFP/y) 与 CD4^t，数量级 10^6 与 2.5×10^6，变量 w_1,...,w_n 与 _{ij}；"
         "链接 https://example.com/a_b 与 DOI 10.1234/test_1；"
+        "无 scheme 链接 doi.org/10.1000/abc_def 与 pubpeer.com/publications/ABC_1；"
         '<a href="https://example.com/x^y">链接^内容</a>；&amp; 实体。'
     )
     out = polish_html(src)
@@ -312,10 +313,12 @@ def _test_polish_html() -> tuple[bool, str]:
     assert f"w<sub {SUB}>1</sub>" in out and f"w<sub {SUB}>n</sub>" in out and f"<sub {SUB}>ij</sub>" in out
     assert "https://example.com/a_b" in out, "URL 内的 _ 被误转"          # URL 保护
     assert "10.1234/test_1" in out, "DOI 内的 _ 被误转"                   # DOI 保护
+    assert "doi.org/10.1000/abc_def" in out, "无 scheme URL 内 _ 被误转"    # 裸域名 URL 保护
+    assert "pubpeer.com/publications/ABC_1" in out, "裸域名 URL 内 _ 被误转"
     assert "链接^内容" in out, "a 标签内文本被改写"                        # <a> 保护
     assert "&amp;" in out, "字符实体被破坏"
     assert polish_html(out) == out, "非幂等"                              # 幂等
-    return True, "polish_html：上下标转换 / URL·DOI·a 保护 / 实体 / 幂等正确"
+    return True, "polish_html：上下标转换 / URL·DOI·裸域名URL·a 保护 / 实体 / 幂等正确"
 
 
 def _test_footer_style() -> tuple[bool, str]:
@@ -343,6 +346,19 @@ def _test_footer_style() -> tuple[bool, str]:
     # 幂等
     assert style_footer_links(out) == out, "非幂等"
     return True, "style_footer_links：页脚小字紧排 / 只命中页脚 / 幂等正确"
+
+
+def _test_repair_github() -> tuple[bool, str]:
+    """repair_github_links：无 scheme / 带 scheme 的固定 GitHub 纯文本统一归一成
+    可点击 <a>（href 完整、显示不带 https://），幂等。"""
+    new_plain = "GitHub：github.com/piwir/PubEcosphere"
+    old_plain = "GitHub：https://github.com/piwir/PubEcosphere"
+    expected = ('GitHub：<a href="https://github.com/piwir/PubEcosphere">'
+                'github.com/piwir/PubEcosphere</a>')
+    assert repair_github_links(new_plain) == expected, "无 scheme 纯文本未修复"
+    assert repair_github_links(old_plain) == expected, "带 scheme 纯文本未修复"
+    assert repair_github_links(expected) == expected, "已修复的再次运行被改写（非幂等）"
+    return True, "repair_github_links：新/旧纯文本归一成可点击 <a>、幂等正确"
 
 
 def _test_date_range() -> tuple[bool, str]:
@@ -374,6 +390,7 @@ TESTS = [
     ("generate 单模型离线", _test_generate),
     ("polish_html 上下标", _test_polish_html),
     ("footer 页脚小字紧排", _test_footer_style),
+    ("repair_github 链接修复", _test_repair_github),
     ("date_range 日期窗口", _test_date_range),
     ("issue_header 头部注入", _test_issue_header),
 ]

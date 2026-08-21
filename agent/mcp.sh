@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# MCP server 启动入口（环境无关）：Claude Code 健康检查/启动时 cwd=“/”、PATH 无 conda，
+# MCP server 启动入口（环境无关）：MCP 客户端健康检查/启动 server 时 cwd 常为 “/”、PATH 无 conda，
 # 这里先切到仓库根、再解析一个可用的 python，保证 `python -m agent.mcp_server` 能跑起来。
 #
-# 挂载（在仓库根执行，展开成绝对路径——健康检查 cwd 是 /，相对路径会失效）：
-#   claude mcp add pubecosphere -- bash "$(pwd)/agent/mcp.sh"
+# 挂载：任何 MCP 客户端在 MCP 配置里添加（绝对路径——健康检查 cwd 是 /，相对路径会失效）：
+#   { "mcpServers": { "pubecosphere": { "command": "bash", "args": ["/abs/path/to/PubEcosphere/agent/mcp.sh"] } } }
 #
 # 换机器/换 python：设 PYTHON 环境变量，或把 conda 加进 PATH（例如 conda activate）。
 set -euo pipefail

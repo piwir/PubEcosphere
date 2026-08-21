@@ -1,9 +1,8 @@
-"""md → 微信兼容 HTML 转换（仓库内 vendor，去外部 skill 依赖）。
+"""md → 微信兼容 HTML 转换（仓库内 vendor，无外部 skill 依赖）。
 
-背景：原流水线依赖外部 skill `~/.claude/skills/baoyu-markdown-to-html`。现改为仓库内
-vendored 转换器（`vendor/md2html/` 包 + `vendor/md2html-cli/scripts/render.ts` 薄 CLI，
-经裁剪：去掉 mermaid，手调 CSS 随 vendor 双份带入库）。不再依赖任何外部 skill；
-手调 CSS 成为仓库资产（原「改在缓存，换机/重装需重改」不再成立）。
+转换器为仓库内 vendored（`vendor/md2html/` 包 + `vendor/md2html-cli/scripts/render.ts` 薄 CLI，
+经裁剪：去掉 mermaid，手调 CSS 随 vendor 双份带入库），不依赖任何外部 skill；
+手调 CSS 是仓库资产，换机/重装不丢。
 
 bun 运行时默认经 `npx -y bun` 启动（用户已确认默认走 npx）；可用环境变量 BUN
 指向本地 bun 可执行文件覆盖。转换器输出固定为输入 md 同目录 `.html`

@@ -1,17 +1,13 @@
-"""阶段A 多模态提取：把一篇（或一小批）素材组装成 OpenAI 多模态 messages。
+"""素材目录与 manifest 的共享工具：合并图收集 / manifest 元数据 / md 顶部补行。
 
-与手动流程输入一致：md 顶部补 `分类`/`IF` 行（取自 manifest.json），
-图片按 first/author/sleuth 顺序用 base64 data-URI 发送，文件名以文本标签给出。
-同一类合并图可能有多张（material 超限拆分：first_merged.png / first_merged_2.png …），全部发送。
+供 `generate`（单模型端到端）与 `flatten`（摊平上传文件夹）复用。
 """
 from __future__ import annotations
 
 import json
 import re
 from pathlib import Path
-from typing import Any, Iterable, Optional
-
-from .client import LLMClient, image_part_data_uri
+from typing import Any, Iterable
 
 IMAGE_KINDS = ("first_merged", "author_merged", "sleuth_merged")
 KIND_LABEL = {
@@ -84,30 +80,3 @@ def prepend_metadata(md_text: str, meta: dict[str, Any]) -> str:
     if not header:
         return md_text
     return "\n".join(header) + "\n\n" + md_text
-
-
-def build_vision_messages(md_text: str, image_paths: Iterable[str | Path],
-                          prompt: str) -> list[dict]:
-    """组装 OpenAI 消息：system=阶段A 提示词；user=md 文本 + 每张图的标签与 data-URI。"""
-    content: list[dict] = [{"type": "text", "text": md_text}]
-    for path in image_paths:
-        p = Path(path)
-        name = p.name
-        content.append({"type": "text", "text": f"【图片 {name}（{kind_label(name)}）】"})
-        content.append(image_part_data_uri(p))
-    return [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": content},
-    ]
-
-
-def run_vision(pid_dir: str | Path, prompt: str, client: LLMClient,
-               meta: Optional[dict[str, Any]] = None,
-               model: str | None = None) -> str:
-    """阶段A 完整调用：读 md + 补元数据 + 打包图片 → 模型返回提取块。"""
-    d = Path(pid_dir)
-    md_text = (d / f"{d.name}.md").read_text(encoding="utf-8")
-    if meta:
-        md_text = prepend_metadata(md_text, meta)
-    messages = build_vision_messages(md_text, collect_images(d), prompt)
-    return client.chat(messages, model=model)

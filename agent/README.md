@@ -18,14 +18,20 @@ pip install -r requirements.txt                      # 仓库根（Pillow）
 cd vendor/md2html-cli && npx -y bun install          # md→html 转换器依赖（首次联网）
 cp .env.example .env                                 # 填 PUBECOSPHERE_LLM_API_KEY（仅 generate 需要）
 
-# Claude Code（必须绝对路径启动脚本：健康检查 cwd=/、PATH 无 conda，见下）
-claude mcp add pubecosphere -- bash "$(pwd)/agent/mcp.sh"
-claude mcp list          # 应显示 √ Connected
+# 任何 MCP 客户端（pi agent 等）：在 MCP 配置里添加（必须绝对路径启动脚本，见下）
+{
+  "mcpServers": {
+    "pubecosphere": {
+      "command": "bash",
+      "args": ["/abs/path/to/PubEcosphere/agent/mcp.sh"]
+    }
+  }
+}
 ```
 
-其他 MCP 客户端在 MCP 配置里加同样命令。server 自推导仓库根（`agent/runner.py`），无需指定 cwd。
+server 自推导仓库根（`agent/runner.py`），无需指定 cwd。
 
-> **启动环境坑**：Claude Code 健康检查/启动 server 时 cwd 是 `/`、PATH 不含 conda，直接 `python -m agent.mcp_server` 会 `ModuleNotFoundError` / `python: not found`。`agent/mcp.sh` 负责两件事：切到仓库根 + 解析可用 python（依次找 `$PYTHON` 环境变量 → `python` → `python3` → 常见 conda 路径）。换机器找不到 python 时：`claude mcp add -e PYTHON=/path/to/python pubecosphere -- bash "$(pwd)/agent/mcp.sh"`。
+> **启动环境坑**：MCP 客户端健康检查/启动 server 时 cwd 常是 `/`、PATH 不含 conda，直接 `python -m agent.mcp_server` 会 `ModuleNotFoundError` / `python: not found`。`agent/mcp.sh` 负责两件事：切到仓库根 + 解析可用 python（依次找 `$PYTHON` 环境变量 → `python` → `python3` → 常见 conda 路径）。换机器找不到 python 时，在配置里加 `"env": {"PYTHON": "/path/to/python"}`。
 
 ## 自检
 
@@ -45,7 +51,7 @@ python -m agent.mcp_server --list-tools
 | `rank` | **issue**, window?, window_field?, run_id? | 两阶段打分 → `output/issue/<n>/score/<run_id>/` | 停等人工审短名单 |
 | `pick` | **issue**, min_score?, dry_run? | 每类选稿 + 当期下载评论图 + manifest | **先 dry_run=true 预览，确认分数线后再正式选** |
 | `material` | **issue**, max_images? | 三图合并 → `output/issue/<n>/material/` | 清场重建 |
-| `flatten` | **issue** | 摊平 upload 文件夹 → `output/issue/<n>/upload/` | 手动上传用 |
+| `flatten` | **issue** | 摊平 upload 文件夹 → `output/issue/<n>/upload/` | 流水线步骤，亦可供人工手动上传 |
 | `generate` | **issue**, assemble?, model?, dry_run?, week_start? | 单模型提取+写稿 → `weekly/stageA_combined.md` + `_draft.md`；自动注入 WEEK_START | **草稿需人工审核**；需 API key |
 | `assemble` | **issue**, dry_run? | 排版成品 md + 图复制 | 审完草稿后调 |
 | `md2html` | **md_path**(限 output/), keep_title?, theme?, check? | md → 微信兼容 HTML（vendored 转换器） | — |

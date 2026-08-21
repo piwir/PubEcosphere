@@ -3,6 +3,9 @@
 Thumbs.db
 Desktop.ini
 
+# site
+site/dist/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -12,6 +15,8 @@ venv/
 node_modules/
 .idea/
 .vscode/
+.bun*/
+.npm*/
 *.env
 .env*
 !.env.example
@@ -26,5 +31,5 @@ output/
 
 # docs（仅 docs/prompts/ 下提示词随仓库提交）
 docs/*
-CLAUDE.md
+AGENTS.md
 !docs/prompts/

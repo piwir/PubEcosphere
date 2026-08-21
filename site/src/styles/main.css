@@ -1,0 +1,506 @@
+/* ============================================================
+   PubEcosphere 站点样式
+   设计：「卷宗 + 荧光笔」——PubPeer 评论者的标志性动作是在图上
+   高亮疑点；全站只让荧光笔扫过一次期号，其余保持纸白安静的克制。
+   所有颜色只取自下方 token（六色），无其他硬编码。
+   ============================================================ */
+
+:root {
+  --paper: #FBFAF6;      /* 背景：暖纸白 */
+  --ink: #16181D;        /* 正文/标题/CTA 底 */
+  --highlight: #FFD84D;  /* 签名色：荧光笔 */
+  --link: #2B47C0;       /* 键盘焦点环（正文链接统一墨色） */
+  --muted: #6F6A5E;      /* 次要文字：暖灰 */
+  --line: #E6E2D6;       /* 分隔线（仅列表/边框） */
+
+  --font-display: 'Saira Condensed', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--paper); }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--ink); }
+
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brand-icon { width: 30px; height: 30px; }
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+
+.nav {
+  display: flex;
+  gap: 24px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.nav a {
+  position: relative;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 2px 0;
+}
+
+.nav a:hover { color: var(--ink); }
+
+.nav a.is-active { color: var(--ink); }
+
+.nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 2px;
+  background: var(--highlight);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s ease;
+}
+
+.nav a:hover::after,
+.nav a.is-active::after { transform: scaleX(1); }
+
+/* ---------- 眉标 / 页标题（归档、关于共用） ---------- */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(36px, 7vw, 52px);
+  line-height: 1.1;
+  margin: 6px 0 4px;
+}
+
+.page-sub {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+/* ---------- 首页 ---------- */
+
+/* 居中「卷宗印章」：期号是全页唯一主角 */
+.hero { padding: 72px 0 0; text-align: center; }
+
+.hero-main { max-width: 720px; margin: 0 auto; }
+
+.issue {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  margin: 4px 0 14px;
+}
+
+.issue-word {
+  font-size: clamp(26px, 5vw, 40px);
+  font-weight: 600;
+}
+
+.issue-num {
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(110px, 24vw, 190px);
+  line-height: 0.9;
+  padding: 0 0.06em;
+}
+
+/* 签名：荧光笔从左侧扫过期号（唯一一次编排动效） */
+.issue-num::before {
+  content: '';
+  position: absolute;
+  left: -0.05em;
+  right: -0.05em;
+  bottom: 0.1em;
+  height: 0.3em;
+  background: var(--highlight);
+  z-index: -1;
+  transform-origin: left center;
+  animation: highlight-sweep 0.6s ease-out 0.15s both;
+}
+
+@keyframes highlight-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.meta b { color: var(--ink); font-weight: 500; }
+
+.cta {
+  position: relative;
+  z-index: 0;
+  display: inline-block;
+  margin-top: 30px;
+  padding: 14px 30px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+
+.cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--highlight);
+  z-index: -1;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.cta:hover { color: var(--ink); }
+
+.cta:hover::before { transform: scaleX(1); }
+
+.sublinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 22px;
+  margin: 18px 0 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.mcp-note {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin: 14px 0 0;
+}
+
+/* 文本链接 hover：荧光笔下划线扫过；次级导航/阅读链接统一墨色（蓝色只留给「关于」页正文真实外链） */
+.sweep-link {
+  position: relative;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.sweep-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background: var(--highlight);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s ease;
+}
+
+.sweep-link:hover::after,
+.sweep-link:focus-visible::after { transform: scaleX(1); }
+
+/* 头图：像证物一样装进细线框 */
+.exhibit {
+  margin: 56px 0 0;
+  border: 1px solid var(--line);
+  padding: 12px;
+  background: var(--paper);
+}
+
+.exhibit img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.exhibit figcaption {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+/* 流水线：单行工序（无框，不抢期号焦点） */
+.pipeline {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin: 56px 0 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+
+.step { font-weight: 500; color: var(--ink); }
+
+.step-arrow { color: var(--muted); }
+
+/* ---------- 归档 ---------- */
+
+.archive { padding: 56px 0 24px; }
+
+.issue-row {
+  display: grid;
+  grid-template-columns: 110px 110px 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.issue-row:last-child { border-bottom: 1px solid var(--line); }
+
+.row-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.row-num small {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.row-date {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.row-summary {
+  font-size: 14px;
+  min-width: 0;
+}
+
+.row-link {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* ---------- 关于 ---------- */
+
+.about { padding: 56px 0 24px; max-width: 720px; }
+
+.sec { margin-top: 44px; }
+
+.sec h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+  margin: 4px 0 10px;
+}
+
+.sec p { margin: 0 0 10px; }
+
+.sec ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.sec li { margin-bottom: 4px; }
+
+.flow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 2.1;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.flow .flow-step { color: var(--ink); font-weight: 500; }
+
+.flow .flow-desc { color: var(--muted); }
+
+.note {
+  border: 1px solid var(--line);
+  padding: 14px 18px;
+  font-size: 14px;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.9;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 16px 18px;
+  overflow-x: auto;
+}
+
+/* ---------- 页脚 ---------- */
+
+.footer {
+  margin-top: 72px;
+  border-top: 1px solid var(--line);
+  padding: 20px 0 30px;
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+
+.footer-copy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.footer a { color: var(--muted); text-decoration: none; }
+
+.footer a:hover { color: var(--ink); }
+
+.footer-dot { color: var(--line); }
+
+.footer-qr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.footer-qr a {
+  display: block;
+  line-height: 0;
+}
+
+.footer-qr img {
+  width: 84px;
+  height: 84px;
+  border: 1px solid var(--line);
+  padding: 6px;
+  background: var(--paper);
+}
+
+.footer-qr p {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+  text-align: left;
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 640px) {
+  .hero { padding-top: 44px; }
+
+  .exhibit { margin-top: 40px; }
+
+  .pipeline { gap: 12px; font-size: 13px; }
+
+  .issue-row {
+    grid-template-columns: 76px 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 4px 14px;
+  }
+
+  .row-num { grid-row: 1 / 3; align-self: center; font-size: 28px; }
+  .row-date { grid-column: 2; }
+  .row-summary { grid-column: 2; }
+  .row-link { grid-row: 1 / 3; align-self: center; }
+
+  .topbar-inner { height: 56px; }
+  .brand-name { font-size: 19px; }
+  .nav { gap: 16px; font-size: 12px; }
+
+  .footer-inner {
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .footer-copy { justify-content: center; }
+
+  .footer-qr p { text-align: right; }
+}
+
+/* ---------- 动效克制 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .issue-num::before { animation: none; }
+  .nav a::after,
+  .sweep-link::after,
+  .cta::before,
+  .cta { transition: none; }
+}

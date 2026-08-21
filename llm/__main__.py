@@ -1,11 +1,10 @@
-"""`python -m llm` 入口：check / selftest / flatten / vision / writer / assemble / generate。
+"""`python -m llm` 入口：check / selftest / flatten / assemble / generate / md2html。
 
-默认不联网：vision / writer / generate 只有不带 --dry-run 时才真正调 API。
+默认不联网：generate 只有不带 --dry-run 时才真正调 API。
 """
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -16,9 +15,7 @@ from .client import LLMClient
 from .config import LLMConfig
 from .flatten import flatten_material, print_flatten_summary
 from .generate import GenerationBlocked, generate_issue
-from .prompts import load_prompt, validate_prompt_schema
-from .vision import collect_images, load_manifest, prepend_metadata, build_vision_messages, run_vision
-from .writer import build_writer_messages, run_writer
+from .prompts import validate_prompt_schema
 
 
 def cmd_md2html(args) -> int:
@@ -41,7 +38,7 @@ def cmd_check(args) -> int:
         for p in problems:
             print(f"  - {p}")
         return 1
-    print("提示词校验通过：三文件存在，八节齐全。")
+    print("提示词校验通过：两文件存在，八节齐全。")
     return 0
 
 
@@ -59,45 +56,6 @@ def cmd_flatten(args) -> int:
     summary = flatten_material(args.material_dir, args.upload_dir,
                                manifest=args.manifest)
     print_flatten_summary(summary)
-    return 0
-
-
-def cmd_vision(args) -> int:
-    pid_dir = Path(args.pid_dir)
-    config = LLMConfig.from_env()
-    prompt = load_prompt("vision", config.prompt_dir)
-    meta = load_manifest(args.manifest).get(pid_dir.name)
-    md_text = (pid_dir / f"{pid_dir.name}.md").read_text(encoding="utf-8")
-    if meta:
-        md_text = prepend_metadata(md_text, meta)
-    messages = build_vision_messages(md_text, collect_images(pid_dir), prompt)
-    if args.dry_run:
-        print(json.dumps(messages, ensure_ascii=False, indent=2))
-        return 0
-    if not config.api_key:
-        print("未设置 PUBECOSPHERE_LLM_API_KEY，无法调用 API（可加 --dry-run 只看消息）",
-              file=sys.stderr)
-        return 1
-    client = LLMClient(config)
-    print(run_vision(pid_dir, prompt, client, meta=meta, model=config.vision_model))
-    return 0
-
-
-def cmd_writer(args) -> int:
-    config = LLMConfig.from_env()
-    prompt = load_prompt("writer", config.prompt_dir)
-    stage_a = Path(args.stage_a).read_text(encoding="utf-8")
-    messages = build_writer_messages(stage_a, prompt)
-    if args.dry_run:
-        print(messages[1]["content"][:2000])
-        print("…（dry-run 仅展示 user 前缀，完整消息见代码）")
-        return 0
-    if not config.api_key:
-        print("未设置 PUBECOSPHERE_LLM_API_KEY，无法调用 API（可加 --dry-run 只看消息）",
-              file=sys.stderr)
-        return 1
-    client = LLMClient(config)
-    print(run_writer(args.stage_a, prompt, client, model=config.writer_model))
     return 0
 
 
@@ -152,7 +110,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python -m llm", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("check", help="校验 docs/prompts 三文件与八节")
+    sub.add_parser("check", help="校验 docs/prompts 两文件与八节")
     sub.add_parser("selftest", help="离线自测")
 
     p = sub.add_parser("md2html", help="md → 微信兼容 HTML（仓库内 vendored 转换器）")
@@ -161,20 +119,10 @@ def main(argv=None) -> int:
     p.add_argument("--theme", default="default")
     p.add_argument("--check", action="store_true", help="检查 bun/脚本/依赖就绪")
 
-    p = sub.add_parser("flatten", help="摊平 material → upload 扁平上传文件夹")
+    p = sub.add_parser("flatten", help="摊平 material → upload 扁平素材文件夹")
     p.add_argument("--material-dir", required=True, type=Path)
     p.add_argument("--upload-dir", required=True, type=Path)
     p.add_argument("--manifest", type=Path, default=None)
-
-    p = sub.add_parser("vision", help="阶段A：单篇多模态提取（--dry-run 只打印消息）")
-    p.add_argument("--pid-dir", required=True, type=Path,
-                   help="material 下某篇的目录，如 output/issue/-1/material/<pid>")
-    p.add_argument("--manifest", type=Path, default=None)
-    p.add_argument("--dry-run", action="store_true")
-
-    p = sub.add_parser("writer", help="阶段B：整期周报写稿（--dry-run 只打印消息前缀）")
-    p.add_argument("--stage-a", required=True, type=Path, help="stageA_combined.md")
-    p.add_argument("--dry-run", action="store_true")
 
     p = sub.add_parser("assemble", help="排版：草稿 → 成品 md + 图复制（离线）")
     p.add_argument("--material-dir", required=True, type=Path)
@@ -200,8 +148,6 @@ def main(argv=None) -> int:
         "selftest": cmd_selftest,
         "md2html": cmd_md2html,
         "flatten": cmd_flatten,
-        "vision": cmd_vision,
-        "writer": cmd_writer,
         "assemble": cmd_assemble,
         "generate": cmd_generate,
     }

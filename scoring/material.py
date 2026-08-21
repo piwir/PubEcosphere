@@ -472,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
     out_root = Path(args.out)
 
     if not args.dry_run:
-        # 整体重建：清掉历史残留合并图再重跑（原为 CLAUDE.md 手工删除约定，现代码化）
+        # 整体重建：清掉历史残留合并图再重跑（手工删除约定已代码化）
         shutil.rmtree(out_root, ignore_errors=True)
         out_root.mkdir(parents=True, exist_ok=True)
 

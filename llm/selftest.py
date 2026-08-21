@@ -1,10 +1,8 @@
 """离线自测：不联网、不调模型，验证 llm/ 各模块的行为。
 
 运行：`python -m llm selftest`。用例：
-- check：三份提示词存在 + 八节齐全。
+- check：两份提示词存在 + 八节齐全。
 - client：假 transport 验 POST body 结构；本地 http.server 验真实 urllib 路径；5xx 退避重试。
-- vision：合成临时 material 断言图片 parts 数量（含 _N 变体）。
-- writer：阶段A 样例断言纯文本结构（无图片 part）。
 - flatten：临时目录断言扁平命名（含 `_2` 变体）。
 - assemble：合成周报断言重写（含 _N 源图查找）与缺失/统一口径告警。
 - generate：假 transport 断言 stageA_combined 归集 + 草稿写出。
@@ -23,13 +21,11 @@ from pathlib import Path
 from PIL import Image
 
 from .assemble import assemble_weekly
-from .client import LLMConfig, LLMClient, LLMError, default_transport, image_part_data_uri
+from .client import LLMConfig, LLMClient, LLMError, default_transport
 from .flatten import flatten_material
 from .generate import generate_issue, issue_header, material_papers, weekly_date_range
 from .polish_html import polish_html, repair_github_links, style_footer_links
-from .prompts import load_prompt, validate_prompt_schema
-from .vision import build_vision_messages, collect_images, prepend_metadata
-from .writer import build_writer_messages
+from .prompts import validate_prompt_schema
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -84,14 +80,9 @@ def _test_client_structure() -> tuple[bool, str]:
     assert captured["url"] == "https://example.com/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer k"
     body = captured["payload"]
+    assert body["model"] == cfg.model
     assert body["messages"][0]["content"] == "hello"
-    with tempfile.TemporaryDirectory() as tmp:
-        img_path = Path(tmp) / "img.png"
-        img_path.write_bytes(_make_png())
-        img = image_part_data_uri(img_path)
-        assert img["type"] == "image_url"
-        assert img["image_url"]["url"].startswith("data:image/png;base64,")
-    return True, "POST body / data-URI part 结构正确"
+    return True, "POST body 结构正确（model 缺省用 config.model）"
 
 
 def _test_client_retry() -> tuple[bool, str]:
@@ -167,45 +158,11 @@ def _test_http_server() -> tuple[bool, str]:
         out = client.chat([{"role": "user", "content": "ping"}])
         assert out == "from-server"
         body = json.loads(srv.captured_body)
-        assert body["model"] == cfg.writer_model
+        assert body["model"] == cfg.model
         assert body["messages"][0]["content"] == "ping"
         return True, "真实 urllib → http.server 收发正常"
     finally:
         srv.shutdown()
-
-
-def _test_vision() -> tuple[bool, str]:
-    prompt = load_prompt("vision")
-    with tempfile.TemporaryDirectory() as tmp:
-        mat = Path(tmp)
-        # 含 _2 变体：first 2 张 + author 1 张 + sleuth 0 → 共 3 parts
-        _make_paper_dir(mat, "PID0000000000000001", {"first_merged": 2, "author_merged": 1, "sleuth_merged": 0})
-        d = mat / "PID0000000000000001"
-        imgs = collect_images(d)
-        names = [p.name for p in imgs]
-        assert names == ["first_merged.png", "first_merged_2.png", "author_merged.png"], names
-        md = (d / "PID0000000000000001.md").read_text(encoding="utf-8")
-        md = prepend_metadata(md, {"category": "测试", "impact": "IF 1.0"})
-        assert md.startswith("分类：测试\nIF：1.0\n"), "元数据行未补到顶部"
-        messages = build_vision_messages(md, imgs, prompt)
-        parts = messages[1]["content"]
-        n_img = sum(1 for p in parts if p["type"] == "image_url")
-        assert n_img == 3, f"图片 parts {n_img} != 3"
-        assert any("first_merged_2" in p["text"] for p in parts if p["type"] == "text")
-        # 断档：只有 _3 没有 _2 时 _3 应不被收集
-        (d / "author_merged_3.png").write_bytes(_make_png())
-        assert [p.name for p in collect_images(d)] == names, "断档变体不应被收集"
-    return True, "合成 material：图片 parts 数量 / _N 变体收集 / 元数据补行正确"
-
-
-def _test_writer() -> tuple[bool, str]:
-    prompt = load_prompt("writer")
-    stage_a = "## ABC123\n\n### 元数据\n- 分类：测试\n"
-    messages = build_writer_messages(stage_a, prompt)
-    assert messages[0]["role"] == "system" and prompt in messages[0]["content"]
-    assert isinstance(messages[1]["content"], str)
-    assert "image_url" not in messages[1]["content"]
-    return True, "阶段B messages 为纯文本，无图片 part"
 
 
 _PID = "A1B2C3D4E5F60718293A4B5C6D7E8F90"  # 32 位 hex，与真实 PubPeer id 格式一致
@@ -384,8 +341,6 @@ TESTS = [
     ("client 重试与错误", _test_client_retry),
     ("client 截断检测", _test_client_truncation),
     ("client 本地 http.server", _test_http_server),
-    ("vision 图片 parts 数量", _test_vision),
-    ("writer 纯文本结构", _test_writer),
     ("flatten + assemble", _test_flatten_assemble),
     ("generate 单模型离线", _test_generate),
     ("polish_html 上下标", _test_polish_html),

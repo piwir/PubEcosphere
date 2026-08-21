@@ -1,6 +1,5 @@
-"""单模型端到端路径：提取 + 写稿用**同一个模型**（无多模态，DeepSeek 文本即可）。
+"""单模型端到端路径：提取 + 写稿用**同一个模型**（纯文本，DeepSeek 文本即可）。
 
-与多模态双模型路径（vision + writer）平行，纯文本：
 - 阶段A：逐篇（或一批）素材 md → 文本提取提示词（prompt_extract_text）→ 冲突点提取块。
   图片描述全部来自评论者/作者配图时自己写下的原话（素材 md 的「图（推文用）」小节与
   相关评论正文），模型无读图能力、绝不臆测图内看不到的内容。
@@ -20,8 +19,8 @@ from typing import Iterable, Optional
 from .assemble import assemble_weekly
 from .client import LLMClient
 from .config import LLMConfig
+from .manifest import load_manifest, prepend_metadata
 from .prompts import load_prompt
-from .vision import load_manifest, prepend_metadata
 
 
 class GenerationBlocked(Exception):
@@ -40,7 +39,7 @@ def build_extract_messages(papers: Iterable[str | Path], prompt: str,
                            meta: Optional[dict] = None) -> list[dict]:
     """把若干篇素材 md 拼成一个 user 文本（每篇顶部补 分类/IF），system=extract 提示词。
 
-    与多模态 vision 不同：这里**不打包图片**，纯文本——模型依据评论者原话概括图片内容。
+    纯文本、不打包图片——模型依据评论者原话概括图片内容。
     """
     blocks: list[str] = []
     for paper in papers:

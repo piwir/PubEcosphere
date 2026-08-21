@@ -1,6 +1,6 @@
-"""摊平 material/ 为扁平上传文件夹 upload/（手动上传的入口，纯离线）。
+"""摊平 material/ 为扁平素材文件夹 upload/（run_issue.sh 流水线步骤，纯离线；亦可供人工手动上传）。
 
-- md 复制为 `<pid>.md`，顶部补 `分类`/`IF` 两行（取自 manifest.json，与视觉模型读取一致）。
+- md 复制为 `<pid>.md`，顶部补 `分类`/`IF` 两行（取自 manifest.json）。
 - 图片复制为 `<pid>_<name>.png`（first_merged / author_merged / sleuth_merged 及超限拆分
   的 first_merged_2.png 等，存在才复制）。
 - 目标目录**无子目录**，方便对话平台里按 pid 前缀框选上传。
@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
-from .vision import collect_images, load_manifest
+from .manifest import collect_images, load_manifest
 
 
 def flatten_material(material_dir: str | Path, upload_dir: str | Path,

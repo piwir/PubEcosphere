@@ -274,7 +274,7 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
         _material),
     ToolDef(
         "flatten",
-        "摊平上传文件夹：扁平 <pid>_<kind>[_N].png → output/issue/<n>/upload/（手动上传用）。",
+        "摊平素材文件夹：扁平 <pid>_<kind>[_N].png → output/issue/<n>/upload/（流水线步骤，亦可供人工手动上传）。",
         _schema({"issue": {"type": "string", "description": "期号"}}, required=["issue"]),
         _flatten),
     ToolDef(
@@ -337,7 +337,7 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
 # ---- 执行 ----------------------------------------------------------------
 
 _PREFLIGHT_CHECKS: list[tuple[list[str], str]] = [
-    ([PY, "-m", "llm", "check"], "提示词校验（三文件八节）"),
+    ([PY, "-m", "llm", "check"], "提示词校验（两文件八节）"),
     ([PY, "-m", "llm", "selftest"], "离线自测"),
     ([PY, "-m", "llm", "md2html", "--check"], "md2html 就绪（bun+render.ts+node_modules）"),
     ([PY, "-m", "scoring.pipeline", "status", "--json"], "status 只读可跑"),

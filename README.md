@@ -1,6 +1,14 @@
-# PubEcosphere
-
-> 一个 PubPeer 周报生成项目
+<p align="center">
+  <img src="images/intro.png" width="100%" alt="PubEcosphere">
+  <br>
+  <h1>PubEcosphere</h1>
+  PubPeer 学术诚信周报生成管线：抓取 → 两阶段打分 → 图材素材 → LLM 周报<br><br>
+  <a href="https://piwir.github.io/PubEcosphere/"><b>官网</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/piwir/PubEcosphere">GitHub</a>
+  &nbsp;·&nbsp;
+  <a href="images/QR.png"><b>微信公众号</b></a>
+</p>
 
 基于 PubPeer（pubpeer.com）公开评论，抓取存在**作者与打假人激烈交锋**的论文，多维度打分排序，由大模型生成周报；整条流水线封装成 **MCP server**，可挂载到**个人 agent** 作为组件使用。
 
@@ -47,12 +55,11 @@ ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
 | `RUN_REVISIT` | `0` | `1` = 先跑回访 revisit（默认 0：数据由长期 cron 爬虫供给，脚本只管生成） |
 | `DRY_RUN` | `0` | `1` = 只预览 pick |
 
-每期产物在 `output/issue/<期号>/`：`score/`（打分报告）、`pub/` + `manifest.*`（素材与清单）、`material/`（图材）、`upload/`（上传夹）、`weekly/`（周报成品 + `*-base64.html` 微信粘贴用）。不用脚本时各步骤的单条命令见 `CLAUDE.md`「常用命令」。
+每期产物在 `output/issue/<期号>/`：`score/`（打分报告）、`pub/` + `manifest.*`（素材与清单）、`material/`（图材）、`upload/`（扁平素材夹）、`weekly/`（周报成品 + `*-base64.html` 微信粘贴用）。不用脚本时各步骤的单条命令见 `run_issue.sh` 头注释与 [agent/README.md](agent/README.md)。
 
 ## LLM 周报生成
 
-- **单模型路径（推荐）**：`python -m llm generate` 用**同一个模型**完成提取 + 写稿（无多模态，图片描述来自评论者配图时的原话）。
-- **多模态双模型路径（预留）**：vision 提取 + writer 写稿。
+- `python -m llm generate` 用**同一个模型**完成提取 + 写稿（纯文本，图片描述来自评论者配图时的原话）。
 
 提示词见 `docs/prompts/`（随仓库提交）；方案细节见 `docs/llm-scheme.md`。
 
@@ -68,18 +75,24 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 ## MCP 集成（agent 组件）
 
-流水线封装成 **MCP server**，可挂载到任何 MCP 客户端（Claude Code / claude.ai 桌面 / 其他 agent）当作一个组件使用。Server 是无状态薄层：智能在确定性 CLI + 机器可读状态（`status`）+ 明确退出码里，工具只做转发。
+流水线封装成 **MCP server**，可挂载到任何 MCP 客户端当作一个组件使用。Server 是无状态薄层：智能在确定性 CLI + 机器可读状态（`status`）+ 明确退出码里，工具只做转发。
 
 **前提**：`pip install -r requirements.txt`；`cd vendor/md2html-cli && npx -y bun install`（首次联网拉传递依赖一次）；`.env` 配 `PUBECOSPHERE_LLM_API_KEY`（仅 `generate` 需要）。
 
-**挂载（Claude Code）**：
+**挂载**（任何 MCP 客户端的 MCP 配置里添加，必须**绝对路径**启动脚本）：
 
-```bash
-claude mcp add pubecosphere -- bash "$(pwd)/agent/mcp.sh"   # 展开成绝对路径
-claude mcp list          # 确认 connected（√）
+```json
+{
+  "mcpServers": {
+    "pubecosphere": {
+      "command": "bash",
+      "args": ["/abs/path/to/PubEcosphere/agent/mcp.sh"]
+    }
+  }
+}
 ```
 
-> 健康检查时 cwd=`/`、PATH 无 conda，挂载必须用**绝对路径**启动脚本 `agent/mcp.sh`（自切仓库根 + 解析 python）；找不到 python 时加 `-e PYTHON=/path/to/python`。
+> 客户端健康检查时 cwd=`/`、PATH 无 conda，`agent/mcp.sh` 负责自切仓库根 + 解析 python；找不到 python 时加 `"env": {"PYTHON": "/path/to/python"}`。
 
 **其他 MCP 客户端**：在 MCP 配置里添加同样命令（server 自推导仓库根，无需指定 cwd）。
 
@@ -123,9 +136,8 @@ PubEcosphere/
 
 | 文档 | 内容 |
 | --- | --- |
-| `docs/prompts/` | 文本提取 / 多模态提取 / 写稿 三套提示词（随仓库提交） |
+| `docs/prompts/` | 文本提取 / 写稿 两套提示词（随仓库提交） |
 | `agent/README.md` | MCP 工具详细文档（参数 / 返回 / 门槛指引 / 产物路径） |
-| `CLAUDE.md` | 数据流 / 目录约定 / 常用命令（本地私有） |
 
 ## 免责声明
 

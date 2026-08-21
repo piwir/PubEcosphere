@@ -87,7 +87,7 @@ python -m llm generate --material-dir "$OUT_ROOT/material" --weekly-dir "$WEEKLY
 
 # 7) md → 微信兼容 HTML（--keep-title 保留主标题 `# PubPeer 周报 · issue N`）
 #    转换器为仓库内 vendor（vendor/md2html-cli），bun 默认经 npx -y bun 启动，
-#    不再依赖外部 skill ~/.claude/skills/baoyu-markdown-to-html。
+#    不依赖任何外部 skill。
 echo "==> [8/9] md2html md → html"
 python -m llm md2html "$WEEKLY/$ISSUE.md" --theme default --keep-title
 

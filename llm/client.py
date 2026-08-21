@@ -1,19 +1,17 @@
 """OpenAI 兼容 `chat/completions` 客户端（纯 stdlib urllib 实现）。
 
-预留未启用，见 docs/llm-scheme.md §8。无第三方依赖：
-- 请求体按 OpenAI 消息格式构造；多模态图片用 base64 data-URI 的 image_url part。
+无第三方依赖：
+- 请求体按 OpenAI 消息格式构造（纯文本消息）。
 - `transport` 可注入（默认走 urllib），离线自测用假 transport 验 POST body 即可。
 - 5xx / 429 退避重试，参照 crawler/client.py 的 RETRYABLE 先例。
 未来若想换 openai SDK，只改本文件。
 """
 from __future__ import annotations
 
-import base64
 import json
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Any, Callable, Optional
 
 from .config import LLMConfig
@@ -36,23 +34,6 @@ def default_transport(url: str, payload: dict, headers: dict, timeout: float) ->
     return resp.status, parsed
 
 
-def image_part_data_uri(path: str | Path) -> dict:
-    """图片转 OpenAI 多模态 part（base64 data-URI）。合并图均为 PNG。"""
-    with open(path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("ascii")
-    ext = Path(path).suffix.lower().lstrip(".")
-    if ext == "jpg":
-        ext = "jpeg"
-    if not ext:
-        ext = "png"
-    return {"type": "image_url", "image_url": {"url": f"data:image/{ext};base64,{b64}"}}
-
-
-def image_part_file_url(path: str | Path) -> dict:
-    """图片转 file:// URL part（少数服务端支持，默认用 data-URI）。"""
-    return {"type": "image_url", "image_url": {"url": f"file://{Path(path).resolve()}"}}
-
-
 class LLMError(RuntimeError):
     pass
 
@@ -64,9 +45,9 @@ class LLMClient:
 
     def chat(self, messages: list[dict], model: str | None = None,
              temperature: float = 0.7, max_tokens: int | None = None) -> str:
-        """发送一轮对话，返回助手消息文本。model 缺省用 writer_model。"""
+        """发送一轮对话，返回助手消息文本。model 缺省用 config.model。"""
         payload: dict[str, Any] = {
-            "model": model or self.config.writer_model,
+            "model": model or self.config.model,
             "messages": messages,
         }
         if temperature is not None:

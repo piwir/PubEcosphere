@@ -19,7 +19,7 @@ PROMPT_DIR_DEFAULT = Path(__file__).resolve().parent.parent / "docs" / "prompts"
 # 仓库根（llm/ 的父目录）下的 .env；gitignored，不随代码提交。
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
-# 单模型路径（extract_text + writer 用同一模型）与多模态路径共用的变量。
+# 单模型路径（extract_text + writer 用同一模型）
 ENV_MODEL = "PUBECOSPHERE_LLM_MODEL"
 ENV_MAX_TOKENS = "PUBECOSPHERE_LLM_MAX_TOKENS"
 
@@ -42,7 +42,7 @@ def load_dotenv(path: str | Path = ENV_FILE) -> None:
 load_dotenv()  # 模块导入时一次性加载仓库根 .env（幂等、值只填缺的）
 
 
-# 默认模型：DeepSeek V4 Flash（单模型与多模态预留路径共用）。
+# 默认模型：DeepSeek V4 Flash。
 DEFAULT_MODEL = "deepseek-v4-flash"
 # 输出硬上限：顶满模型上限（384K），不人为限流；不传的话 API 默认仅 4096，整期写稿必截断。
 DEFAULT_MAX_TOKENS = 393216
@@ -52,8 +52,6 @@ DEFAULT_MAX_TOKENS = 393216
 class LLMConfig:
     base_url: str = DEFAULT_BASE_URL
     api_key: str = ""
-    vision_model: str = DEFAULT_MODEL
-    writer_model: str = DEFAULT_MODEL
     # 单模型路径：extract_text 与 writer 共用。
     model: str = DEFAULT_MODEL
     max_tokens: int = DEFAULT_MAX_TOKENS  # 顶满模型上限，不人为限流
@@ -67,8 +65,6 @@ class LLMConfig:
         vals: dict = {
             "base_url": os.environ.get("PUBECOSPHERE_LLM_BASE_URL", DEFAULT_BASE_URL),
             "api_key": os.environ.get("PUBECOSPHERE_LLM_API_KEY", ""),
-            "vision_model": os.environ.get("PUBECOSPHERE_LLM_VISION_MODEL", DEFAULT_MODEL),
-            "writer_model": os.environ.get("PUBECOSPHERE_LLM_WRITER_MODEL", DEFAULT_MODEL),
             "model": os.environ.get(ENV_MODEL, DEFAULT_MODEL),
             "max_tokens": int(os.environ.get(ENV_MAX_TOKENS, str(DEFAULT_MAX_TOKENS))),
             "timeout": float(os.environ.get("PUBECOSPHERE_LLM_TIMEOUT", "120")),

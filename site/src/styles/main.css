@@ -391,16 +391,6 @@ a { color: var(--ink); }
   font-size: 14px;
 }
 
-.code {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.9;
-  background: var(--ink);
-  color: var(--paper);
-  padding: 16px 18px;
-  overflow-x: auto;
-}
-
 /* ---------- 页脚 ---------- */
 
 .footer {

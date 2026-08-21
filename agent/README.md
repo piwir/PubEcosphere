@@ -47,9 +47,9 @@ python -m agent.mcp_server --list-tools
 | `status` | issue?, json? | 只读状态：DB 行数 / 最新 run_id / 各期阶段 / `next_step` | **起步先跑它** |
 | `preflight` | — | 环境自检：提示词校验 + 离线自测 + md2html 就绪 + status 可读 | 挂载后确认可用 |
 | `capture` | max_offset? | 每日捕获 feed（/api/recent 约 400 条） | 独立每日操作；生产由**长期 cron 供给**，`run_issue.sh` 默认不跑 |
-| `revisit` | window?, limit? | 回访完整评论线程（幂等 upsert，可断点续跑） | 同上，默认由 cron 供给 |
-| `rank` | **issue**, window?, window_field?, run_id? | 两阶段打分 → `output/issue/<n>/score/<run_id>/` | 停等人工审短名单 |
-| `pick` | **issue**, min_score?, dry_run? | 每类选稿 + 当期下载评论图 + manifest | **先 dry_run=true 预览，确认分数线后再正式选** |
+| `revisit` | window?, window_dates?, limit? | 回访完整评论线程（幂等 upsert，可断点续跑） | 同上，默认由 cron 供给 |
+| `rank` | **issue**, window?, window_dates?, window_field?, run_id? | 两阶段打分 → `output/issue/<n>/score/<run_id>/`；正整数期号不传 window 时自动按期号推绝对窗口 | 停等人工审短名单 |
+| `pick` | **issue**, min_score?, max_total?, dry_run? | 每类选稿（总数上限 max_total，默认 25）+ 当期下载评论图 + manifest | **先 dry_run=true 预览，确认分数线后再正式选** |
 | `material` | **issue**, max_images? | 三图合并 → `output/issue/<n>/material/` | 清场重建 |
 | `flatten` | **issue** | 摊平 upload 文件夹 → `output/issue/<n>/upload/` | 流水线步骤，亦可供人工手动上传 |
 | `generate` | **issue**, assemble?, model?, dry_run?, week_start? | 单模型提取+写稿 → `weekly/stageA_combined.md` + `_draft.md`；自动注入 WEEK_START | **草稿需人工审核**；需 API key |
@@ -68,6 +68,7 @@ python -m agent.mcp_server --list-tools
 ## 参数约定
 
 - `issue`：正整数期号或 `-1`（测试期），其余拒绝。
+- 打分窗口：`window`（相对 'D1 D2'）与 `window_dates`（绝对 'START END' ISO 日期，起含止不含）互斥；正整数期号都不传时自动按 `WEEK_START_BASE+(期号-1)*7` 推绝对窗口（与 run_issue.sh / 导语标签同算法）；`-1` 不传则不过滤。
 - md/html 路径：必须 `output/` 内相对路径（如 `output/issue/1/weekly/1.md`），防越界读写。
 - 所有工具返回值：`exit_code` + `stdout` + `stderr` +（`preflight`/`status` 含机器可读段）。
 

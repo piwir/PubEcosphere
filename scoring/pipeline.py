@@ -104,6 +104,21 @@ def _in_window(field_value: str | None, window: tuple[int, int]) -> bool:
     return lo <= dt < hi
 
 
+def _in_date_range(field_value: str | None, start_iso: str, end_iso: str) -> bool:
+    """绝对日期窗口：start <= dt < end（起含止不含，ISO 日期，UTC）。"""
+    if not field_value:
+        return False
+    try:
+        dt = datetime.fromisoformat(field_value.replace("Z", "+00:00"))
+        lo = datetime.fromisoformat(start_iso)
+        hi = datetime.fromisoformat(end_iso)
+    except ValueError:
+        return False
+    if dt.tzinfo is not None:      # 归一到 naive UTC，与 naive 的起止比较
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return lo <= dt < hi
+
+
 def _make_shortlist(results: list[dict], k: int) -> list[dict]:
     """每分类（大类或小类）按 stage1(final) 取 top-k。"""
     by_cat: dict[str, list[dict]] = {}
@@ -262,7 +277,14 @@ def cmd_rank(args) -> int:
             "deep": None, "breakdown": bd,
         })
 
-    if args.window:
+    if args.window_dates:
+        before = len(results)
+        results = [r for r in results
+                   if _in_date_range(r[args.window_field], args.window_dates[0], args.window_dates[1])]
+        if args.verbose:
+            print(f"window-dates {args.window_dates[0]}..{args.window_dates[1]} "
+                  f"on {args.window_field}: {before} → {len(results)}", flush=True)
+    elif args.window:
         before = len(results)
         results = [r for r in results if _in_window(r[args.window_field], args.window)]
         if args.verbose:
@@ -337,6 +359,8 @@ def cmd_pick(args) -> int:
         cfg.min_pick_score = args.min_score
     if args.min_images is not None:
         cfg.min_pick_images = args.min_images
+    if args.max_total is not None:
+        cfg.max_picks_total = args.max_total
 
     sstore = ScoringStore(args.db)
     run_id = args.run_id or sstore.latest_run_id()
@@ -397,8 +421,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--level", choices=("major", "minor"), default="minor",
                    help="报告分类粒度：大类或小类（默认小类，细分更接近 HelloGitHub 模式）")
     p.add_argument("--stage1-only", action="store_true", help="只做 stage-1 粗筛，不深度回访")
-    p.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
-                   help="硬过滤 字段∈[now-D1,now-D2)（默认不过滤）")
+    wgroup = p.add_mutually_exclusive_group()
+    wgroup.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
+                        help="硬过滤 字段∈[now-D1,now-D2)（默认不过滤）")
+    wgroup.add_argument("--window-dates", nargs=2, default=None, metavar=("START", "END"),
+                        help="硬过滤 字段∈[START,END)（ISO 日期，起含止不含；按期号选期："
+                             "START=WEEK_START+(期号-1)*7，END=START+7 天，与导语标签同算法）")
     p.add_argument("--window-field", choices=("last_commented", "captured_at"),
                    default="last_commented",
                    help="--window 作用的日期字段（默认 last_commented；按首次捕获选期用 captured_at）")
@@ -421,6 +449,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="最终分低于此值不选（默认 config min_pick_score=0.45）")
     p.add_argument("--min-images", type=int, default=None,
                    help="评论图片少于此值不选（默认 config min_pick_images=1）")
+    p.add_argument("--max-total", type=int, default=None,
+                   help="每期入选总数上限（默认 config max_picks_total=25；0 = 不限）")
     p.add_argument("--dry-run", action="store_true", help="只打印将选的 picks，不写文件不标记")
     p.set_defaults(func=cmd_pick)
 

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -60,6 +61,14 @@ def _issue_dir(n: str) -> str:
     return f"output/issue/{n}"
 
 
+def _window_dates_for_issue(n: str, base: str = WEEK_START_BASE) -> tuple[str, str]:
+    """期号 → 绝对窗口 [START, START+7d)（ISO 日期，起含止不含）。
+
+    与 run_issue.sh / llm.generate.weekly_date_range 同算法：START = base + (期号-1)*7。"""
+    start = date.fromisoformat(base) + timedelta(days=(int(n) - 1) * 7)
+    return start.isoformat(), (start + timedelta(days=7)).isoformat()
+
+
 # ---- 各工具 --------------------------------------------------------------
 
 def _status(args: dict) -> CmdSpec:
@@ -100,11 +109,22 @@ def _rank(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
     argv = [PY, "-m", "scoring.pipeline", "rank", "--db", DB_DEFAULT, "--issue", n]
     win = args.get("window")
+    wdates = args.get("window_dates")
+    if win and wdates:
+        raise ValueError("window 与 window_dates 互斥，只能传一个")
     if win:
         parts = str(win).split()
         if len(parts) != 2 or not all(p.lstrip("-").isdigit() for p in parts):
             raise ValueError(f"window 须为 'D1 D2' 两个整数：{win!r}")
         argv += ["--window", parts[0], parts[1]]
+    elif wdates:
+        parts = str(wdates).split()
+        if len(parts) != 2:
+            raise ValueError(f"window_dates 须为 'START END' 两个 ISO 日期：{wdates!r}")
+        argv += ["--window-dates", parts[0], parts[1]]
+    elif n != "-1":
+        # 与 run_issue.sh 一致：正整数期号按期号自动推算绝对窗口（-1 测试期保持不传）
+        argv += ["--window-dates", *_window_dates_for_issue(n)]
     # 与 run_issue.sh 一致：默认 captured_at（CLI 本身默认 last_commented，故显式传）
     argv += ["--window-field", str(args.get("window_field") or "captured_at")]
     if args.get("run_id"):
@@ -115,9 +135,11 @@ def _rank(args: dict) -> CmdSpec:
 def _pick(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
     argv = [PY, "-m", "scoring.pipeline", "pick", "--db", DB_DEFAULT, "--issue", n]
-    # 与 run_issue.sh 一致：默认 0.55（config 的 0.45 只是 CLI 无 --min-score 时的回退）
-    ms = args["min_score"] if args.get("min_score") is not None else 0.55
+    # 与 run_issue.sh 一致：默认 0.50（config 的 0.45 只是 CLI 无 --min-score 时的回退）
+    ms = args["min_score"] if args.get("min_score") is not None else 0.50
     argv += ["--min-score", str(float(ms))]
+    if args.get("max_total") is not None:
+        argv += ["--max-total", str(int(args["max_total"]))]
     if args.get("dry_run"):
         argv.append("--dry-run")
     return CmdSpec(argv)
@@ -249,7 +271,10 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
         "两阶段打分（stage-1 粗筛全部 → 短名单深度回访 stage-2）。"
         "返回分数报告路径（output/issue/<n>/score/<run_id>/）供人工审阅短名单。",
         _schema({"issue": {"type": "string", "description": "期号（正整数或 -1 测试期）"},
-                 "window": {"type": "string", "description": "'D1 D2' 回访/打分窗口"},
+                 "window": {"type": "string", "description": "相对窗口 'D1 D2'，如 '10 3'（与 window_dates 互斥）"},
+                 "window_dates": {"type": "string",
+                                  "description": "绝对窗口 'START END' 两个 ISO 日期（起含止不含）；"
+                                                 "不传时正整数期号自动按期号推算"},
                  "window_field": {"type": "string",
                                   "description": "日期基准：captured_at（默认）/ last_commented"},
                  "run_id": {"type": "string", "description": "报告日期，默认今天"}},
@@ -260,7 +285,8 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
         "按分类选稿：此刻才为当期被选论文下载评论图 + 写 manifest。"
         "⚠ 人工门槛：先 dry_run=true 预览（只打印将选的 picks），经人工确认分数线后再 dry_run=false 正式选。",
         _schema({"issue": {"type": "string", "description": "期号"},
-                 "min_score": {"type": "number", "description": "分数门槛（默认 0.55，与 run_issue.sh 一致；人工拍板）"},
+                 "min_score": {"type": "number", "description": "分数门槛（默认 0.50，与 run_issue.sh 一致）"},
+                 "max_total": {"type": "integer", "description": "每期入选总数上限（默认 25，超出按 final 分降序裁剪；0 = 不限）"},
                  "dry_run": {"type": "boolean", "description": "只预览不下载（默认 false）"}},
                 required=["issue"]),
         _pick),

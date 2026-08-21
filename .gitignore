@@ -6,7 +6,7 @@ Desktop.ini
 # site
 site/dist/
 
-# Python
+# Others
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -17,6 +17,7 @@ node_modules/
 .vscode/
 .bun*/
 .npm*/
+.mcp*
 *.env
 .env*
 !.env.example

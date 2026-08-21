@@ -30,7 +30,7 @@ const base = import.meta.env.BASE_URL
         <div class="footer-copy">
           <a :href="site.github" target="_blank" rel="noopener">GitHub</a>
           <span class="footer-dot">·</span>
-          <span>MIT License</span>
+          <a href="https://github.com/piwir/PubEcosphere/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
           <span class="footer-dot">·</span>
           <span>数据来自 <a href="https://pubpeer.com" target="_blank" rel="noopener">PubPeer</a></span>
         </div>

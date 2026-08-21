@@ -99,7 +99,8 @@ def select_picks(rows: list[dict], published_other: set[str], cfg) -> tuple[list
     先按选稿门槛过滤（config）：
         - final_score < cfg.min_pick_score → 不选（低分无后续推文价值）；
         - 评论无图片（has_image < cfg.min_pick_images）→ 不选；has_image=None（stage-1）不过滤。
-    过滤后再按类别分组，小类阈值/每类取篇数规则不变。
+    过滤后再按类别分组，小类阈值/每类取篇数规则不变；
+    每类选完后若总数超过 cfg.max_picks_total（>0）则跨类按 final 分降序裁剪。
     """
     grouped: dict[str, list[dict]] = {}
     for r in rows:
@@ -117,6 +118,9 @@ def select_picks(rows: list[dict], published_other: set[str], cfg) -> tuple[list
             continue
         take = cfg.picks_per_cat if len(avail) >= cfg.small_cat_threshold else cfg.small_cat_pick
         picks.extend(avail[:take])
+    if cfg.max_picks_total and len(picks) > cfg.max_picks_total:
+        # 全局上限：跨类按 final 分降序裁到 max_picks_total（硬上限、无下限）
+        picks = sorted(picks, key=lambda r: -r["final_score"])[:cfg.max_picks_total]
     return picks, grouped
 
 

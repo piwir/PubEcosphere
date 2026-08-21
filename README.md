@@ -2,10 +2,8 @@
   <img src="images/intro.png" width="100%" alt="PubEcosphere">
   <br>
   <h1>PubEcosphere</h1>
-  PubPeer 学术诚信周报生成管线：抓取 → 两阶段打分 → 图材素材 → LLM 周报<br><br>
+  PubPeer 学术诚信周报生成管线：抓取 → 两阶段打分 → LLM 周报<br><br>
   <a href="https://piwir.github.io/PubEcosphere/"><b>官网</b></a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/piwir/PubEcosphere">GitHub</a>
   &nbsp;·&nbsp;
   <a href="images/QR.png"><b>微信公众号</b></a>
 </p>
@@ -26,6 +24,7 @@
 ```text
 capture（每日捕获 feed）→ revisit（≥7 天后回访评论线程）→ rank（两阶段打分选优）
 → pick（每类选篇打包）→ material（图材合并）→ LLM 生成周报
+→ 手动粘贴发布公众号 → 更新 site.json（官网）
 ```
 
 ## 快速开始
@@ -50,7 +49,7 @@ ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
 | `ISSUE` | `1` | 期号 |
 | `WINDOW` | `"10 3"` | 回访/打分相对窗口（天） |
 | `WINDOW_FIELD` | `captured_at` | 打分日期基准字段 |
-| `MIN_SCORE` | `0.55` | pick 选稿门槛 |
+| `MIN_SCORE` | `0.50` | pick 选稿门槛 |
 | `RUN_CAPTURE` | `0` | `1` = 先跑每日 capture（默认 0：capture 是每日 cron 操作） |
 | `RUN_REVISIT` | `0` | `1` = 先跑回访 revisit（默认 0：数据由长期 cron 爬虫供给，脚本只管生成） |
 | `DRY_RUN` | `0` | `1` = 只预览 pick |
@@ -61,11 +60,11 @@ ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
 
 - `python -m llm generate` 用**同一个模型**完成提取 + 写稿（纯文本，图片描述来自评论者配图时的原话）。
 
-提示词见 `docs/prompts/`（随仓库提交）；方案细节见 `docs/llm-scheme.md`。
+提示词见 `docs/prompts/`。
 
 ### LLM 配置
 
-密钥只走环境变量 / 仓库根 `.env`（**绝不硬编码、不提交**）：
+密钥只走环境变量 / 仓库根 `.env`：
 
 ```bash
 cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
@@ -96,7 +95,19 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 **其他 MCP 客户端**：在 MCP 配置里添加同样命令（server 自推导仓库根，无需指定 cwd）。
 
-**使用建议**：agent 起步先 `status` 自查，`pick` 先 `dry_run=true` 给人工批准，`generate` 后人工审草稿（人工门槛由调用方行为实现）。14 个工具详见 [agent/README.md](agent/README.md)。
+**使用建议**：agent 起步先 `status` 自查，`pick` 先 `dry_run=true` 给人工批准，`generate` 后人工审草稿。14 个工具详见 [agent/README.md](agent/README.md)。
+
+## 网站
+
+https://piwir.github.io/PubEcosphere/ （Vue 3 + Vite，GitHub Actions 自动部署）：展示**当前期号**与公众号入口，另有往期归档与项目介绍。
+
+站点数据由单文件 `site/src/data/site.json` 手动维护。**每期发布后**编辑该文件并 push，Actions 自动重新部署：
+
+1. `currentIssue` / `issueDate` / `window` → 新一期；
+2. `wechat.url` / `wechat.label` → 新一期公众号文章链接；
+3. `issues` 数组头部加一条 `{ "issue": N, "date": "YYYY-MM-DD", "wechatUrl": "…", "summary": "一句话摘要" }`。
+
+本地开发与换图说明见 [site/README.md](site/README.md)。
 
 ## 数据来源
 
@@ -125,9 +136,10 @@ PubEcosphere/
 ├── vendor/md2html-cli/ # 转换器薄 CLI
 ├── run_issue.sh        # 一键流水线脚本
 ├── requirements.txt    # Python 运行时依赖
+├── site/               # 网站
 ├── images/             # 项目素材
-├── data/               # 运行数据（DB gitignore；学科 CSV 随仓库提交）
-├── output/             # 打分报告 / 素材 / 周报（gitignore）
+├── data/               # 运行数据
+├── output/             # 输出周报
 ├── docs/               # 文档
 └── .gitignore
 ```
@@ -136,8 +148,9 @@ PubEcosphere/
 
 | 文档 | 内容 |
 | --- | --- |
-| `docs/prompts/` | 文本提取 / 写稿 两套提示词（随仓库提交） |
-| `agent/README.md` | MCP 工具详细文档（参数 / 返回 / 门槛指引 / 产物路径） |
+| `docs/prompts/` | 文本提取 / 写稿 两套提示词 |
+| `agent/README.md` | MCP 工具详细文档 |
+| `site/README.md` | 网站说明 |
 
 ## 免责声明
 

@@ -51,8 +51,11 @@ def cmd_capture(args: argparse.Namespace, client: PubPeerClient, store: Store) -
 
 def cmd_revisit(args: argparse.Namespace, client: PubPeerClient, store: Store) -> int:
     now = dates.utcnow()
-    if args.window:
-        # 首现窗口：只回访 captured_at∈[now-D1, now-D2) 的文章（如 --window 10 3 = 8.1-8.7 期）
+    if args.window_dates:
+        # 绝对首现窗口：captured_at∈[START, END)（ISO 日期，起含止不含；按期号推算）
+        since, until = args.window_dates
+    elif args.window:
+        # 相对首现窗口：只回访 captured_at∈[now-D1, now-D2) 的文章（如 --window 10 3 = 8.1-8.7 期）
         since = dates.to_iso(now - timedelta(days=args.window[0]))
         until = dates.to_iso(now - timedelta(days=args.window[1]))
     else:
@@ -103,9 +106,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("revisit", help="回访捕获过的文章页，提取评论")
     p.add_argument("--revisit-days", type=int, default=7,
                    help="回访 >=N 天前捕获的文章（默认7）")
-    p.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
-                   help="只回访首现窗口 captured_at∈[now-D1,now-D2) 的文章（覆盖 --revisit-days；"
-                        "如 --window 10 3 = 8.1-8.7 期候选）")
+    wgroup = p.add_mutually_exclusive_group()
+    wgroup.add_argument("--window", nargs=2, type=int, default=None, metavar=("D1", "D2"),
+                        help="只回访首现窗口 captured_at∈[now-D1,now-D2) 的文章（覆盖 --revisit-days；"
+                             "如 --window 10 3 = 8.1-8.7 期候选）")
+    wgroup.add_argument("--window-dates", nargs=2, default=None, metavar=("START", "END"),
+                        help="只回访 captured_at∈[START,END) 的文章（ISO 日期，起含止不含；"
+                             "按期号推算，与 rank --window-dates 同语义）")
     p.add_argument("--limit", type=int, default=None, help="本次最多回访条数（可分批续跑）")
     p.add_argument("--min-comments", type=int, default=0,
                    help="只回访评论数 >=N 的文章（默认0不过滤）")

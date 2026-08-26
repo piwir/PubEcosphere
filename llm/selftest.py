@@ -3,7 +3,6 @@
 运行：`python -m llm selftest`。用例：
 - check：两份提示词存在 + 八节齐全。
 - client：假 transport 验 POST body 结构；本地 http.server 验真实 urllib 路径；5xx 退避重试。
-- flatten：临时目录断言扁平命名（含 `_2` 变体）。
 - assemble：合成周报断言重写（含 _N 源图查找）与缺失/统一口径告警。
 - generate：假 transport 断言 stageA_combined 归集 + 草稿写出。
 - polish_html：上下标转换 / URL·<a> 保护 / 幂等。
@@ -22,7 +21,6 @@ from PIL import Image
 
 from .assemble import assemble_weekly
 from .client import LLMConfig, LLMClient, LLMError, default_transport
-from .flatten import flatten_material
 from .generate import generate_issue, issue_header, material_papers, weekly_date_range
 from .polish_html import polish_html, repair_github_links, style_footer_links
 from .prompts import validate_prompt_schema
@@ -38,11 +36,11 @@ def _make_png(width: int = 12, height: int = 8, color: tuple = (255, 0, 0)) -> b
 
 
 def _make_paper_dir(root: Path, pid: str, kinds: dict[str, int], md_extra: str = "") -> Path:
-    """合成一篇 material 目录：<root>/<pid>/<pid>.md + 按 kinds 生成合并图（值=该类的张数）。
+    """合成一篇素材目录：<root>/<pid>_files/<pid>.md + 按 kinds 生成合并图（值=该类的张数）。
 
     kinds: {"first_merged": 2, "author_merged": 1, "sleuth_merged": 0}
     """
-    d = root / pid
+    d = root / f"{pid}_files"
     d.mkdir(parents=True, exist_ok=True)
     body = (f"# 某论文标题（英文）\n\n- 期刊：Some Journal\n- 质疑人：hoya camphorifolia\n"
             f"## 质疑人证据图（推文用）\n")
@@ -168,22 +166,11 @@ def _test_http_server() -> tuple[bool, str]:
 _PID = "A1B2C3D4E5F60718293A4B5C6D7E8F90"  # 32 位 hex，与真实 PubPeer id 格式一致
 
 
-def _test_flatten_assemble() -> tuple[bool, str]:
+def _test_assemble() -> tuple[bool, str]:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         fake_mat = tmp / "material"
         _make_paper_dir(fake_mat, _PID, {"first_merged": 2, "author_merged": 1, "sleuth_merged": 0})
-        up = tmp / "upload"
-        summary = flatten_material(fake_mat, up, manifest={"picks": [
-            {"pubpeer_id": _PID, "category": "神经科学", "impact": "IF 16.9"}]})
-        assert sorted(f.name for f in up.iterdir()) == [
-            f"{_PID}.md",
-            f"{_PID}_author_merged.png",
-            f"{_PID}_first_merged.png",
-            f"{_PID}_first_merged_2.png",
-        ]
-        assert (up / f"{_PID}.md").read_text().startswith("分类：神经科学\nIF：16.9\n")
-        assert [im for r in summary for im in r["images"]] == ["first_merged", "first_merged_2", "author_merged"]
         # assemble：合成草稿 → 断言 _N 源图查找、重写与告警
         weekly = tmp / "weekly"
         weekly.mkdir()
@@ -208,7 +195,7 @@ def _test_flatten_assemble() -> tuple[bool, str]:
         assert any("无法识别图片种类" in w for w in warnings)
         assert any("不存在" in w for w in warnings)
         assert any("知名打假人" in w for w in warnings)       # 正文含禁词
-        return True, "flatten 扁平命名（含 _2）/ assemble 重写+缺失+统一口径告警正确"
+        return True, "assemble 重写（含 _N 源图）+ 缺失/统一口径告警正确"
 
 
 def _test_generate() -> tuple[bool, str]:
@@ -341,7 +328,7 @@ TESTS = [
     ("client 重试与错误", _test_client_retry),
     ("client 截断检测", _test_client_truncation),
     ("client 本地 http.server", _test_http_server),
-    ("flatten + assemble", _test_flatten_assemble),
+    ("assemble 图重写与告警", _test_assemble),
     ("generate 单模型离线", _test_generate),
     ("polish_html 上下标", _test_polish_html),
     ("footer 页脚小字紧排", _test_footer_style),

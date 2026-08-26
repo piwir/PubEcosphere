@@ -2,14 +2,20 @@
   "siteName": "PubEcosphere",
   "tagline": "PubPeer 学术诚信周报 · 每周三更新",
   "github": "https://github.com/piwir/PubEcosphere",
-  "currentIssue": 2,
-  "issueDate": "2026-08-19",
-  "window": "2026-08-10 – 2026-08-16",
+  "currentIssue": 3,
+  "issueDate": "2026-08-26",
+  "window": "2026-08-17 – 2026-08-23",
   "wechat": {
-    "url": "https://mp.weixin.qq.com/s/Xb9fKV1_-aU0xStSG77PRQ",
-    "label": "阅读第 2 期周报"
+    "url": "https://mp.weixin.qq.com/s/x1sfWGiBFJpvjPMnXbynWw",
+    "label": "阅读第 3 期周报"
   },
   "issues": [
+    {
+      "issue": 3,
+      "date": "2026-08-26",
+      "wechatUrl": "https://mp.weixin.qq.com/s/x1sfWGiBFJpvjPMnXbynWw",
+      "summary": "本期从 PubPeer 公开评论中精选 10 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 7 个学科"
+    },
     {
       "issue": 2,
       "date": "2026-08-19",

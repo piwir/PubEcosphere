@@ -1,4 +1,4 @@
-"""`python -m llm` 入口：check / selftest / flatten / assemble / generate / md2html。
+"""`python -m llm` 入口：check / selftest / assemble / generate / md2html。
 
 默认不联网：generate 只有不带 --dry-run 时才真正调 API。
 """
@@ -13,7 +13,6 @@ from . import selftest
 from .assemble import assemble_weekly
 from .client import LLMClient
 from .config import LLMConfig
-from .flatten import flatten_material, print_flatten_summary
 from .generate import GenerationBlocked, generate_issue
 from .prompts import validate_prompt_schema
 
@@ -50,13 +49,6 @@ def cmd_selftest(args) -> int:
         failed += 0 if ok else 1
     print(f"selftest: {len(results) - failed}/{len(results)} 通过")
     return 1 if failed else 0
-
-
-def cmd_flatten(args) -> int:
-    summary = flatten_material(args.material_dir, args.upload_dir,
-                               manifest=args.manifest)
-    print_flatten_summary(summary)
-    return 0
 
 
 def cmd_assemble(args) -> int:
@@ -119,11 +111,6 @@ def main(argv=None) -> int:
     p.add_argument("--theme", default="default")
     p.add_argument("--check", action="store_true", help="检查 bun/脚本/依赖就绪")
 
-    p = sub.add_parser("flatten", help="摊平 material → upload 扁平素材文件夹")
-    p.add_argument("--material-dir", required=True, type=Path)
-    p.add_argument("--upload-dir", required=True, type=Path)
-    p.add_argument("--manifest", type=Path, default=None)
-
     p = sub.add_parser("assemble", help="排版：草稿 → 成品 md + 图复制（离线）")
     p.add_argument("--material-dir", required=True, type=Path)
     p.add_argument("--weekly-dir", required=True, type=Path)
@@ -147,7 +134,6 @@ def main(argv=None) -> int:
         "check": cmd_check,
         "selftest": cmd_selftest,
         "md2html": cmd_md2html,
-        "flatten": cmd_flatten,
         "assemble": cmd_assemble,
         "generate": cmd_generate,
     }

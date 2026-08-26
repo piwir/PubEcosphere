@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STAGE_NAMES = (
-    "captured", "ranked", "picked", "materialized", "flattened",
+    "captured", "ranked", "picked", "materialized",
     "drafted", "assembled", "html", "base64", "ready_to_publish",
 )
 
@@ -100,11 +100,10 @@ def _read_manifest(issue_dir: Path) -> dict | None:
 
 
 def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
-    dirs = {name: (issue_dir / name).is_dir() for name in ("score", "pub", "material", "upload", "weekly")}
+    dirs = {name: (issue_dir / name).is_dir() for name in ("score", "pub", "weekly")}
     score_dir = issue_dir / "score"
     ranked = dirs["score"] and any(p.is_dir() for p in score_dir.iterdir())
-    material_index = issue_dir / "material" / "index.md"
-    upload_nonempty = dirs["upload"] and any((issue_dir / "upload").iterdir())
+    material_index = issue_dir / "pub" / "index.md"
     weekly = issue_dir / "weekly"
     draft = weekly / "stageA_combined.md"
     assembled = weekly / f"{issue}.md"
@@ -117,7 +116,6 @@ def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
         "ranked": bool(ranked),
         "picked": manifest is not None,
         "materialized": material_index.exists(),
-        "flattened": bool(upload_nonempty),
         "drafted": draft.exists(),
         "assembled": assembled.exists(),
         "html": html.exists(),
@@ -131,9 +129,7 @@ def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
     elif not stages["picked"]:
         next_step = "pick（选稿，先 dry-run 预览给人工批准）"
     elif not stages["materialized"]:
-        next_step = "material（图材合并）"
-    elif not stages["flattened"]:
-        next_step = "flatten（摊平 upload 文件夹）"
+        next_step = "material（图材合并，写回 pub/<pid>_files/）"
     elif not (stages["drafted"] and stages["assembled"]):
         next_step = "generate --assemble（写稿+排版，需 API key；草稿需人工审）"
     elif not stages["html"]:

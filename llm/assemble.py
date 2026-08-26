@@ -1,9 +1,9 @@
 """排版：把阶段B 输出的周报草稿 md 变成成品（纯离线，手动流程也用）。
 
 - 把草稿里引用的图片统一成扁平 `<pid>_<flat>.png`（裸文件名 `first_merged.png`
-  也会重写为 `<pid>_first_merged.png`），并把图从 material/<pid>/ 复制到与 md 同目录。
+  也会重写为 `<pid>_first_merged.png`），并把图从 material 目录（pub/<pid>_files/）复制到与 md 同目录。
   同一类合并图可能有多张（`<pid>_first_merged.png` / `<pid>_first_merged_2.png`），
-  序号后缀 `_N` 原样保留：material 里找 `first_merged_2.png`、成品写 `<pid>_first_merged_2.png`。
+  序号后缀 `_N` 原样保留：pub/<pid>_files/ 里找 `first_merged_2.png`、成品写 `<pid>_first_merged_2.png`。
 - 校验每张图：alt 是否带 `PID:<pid>` 前缀、material 里是否真存在；缺失/无标签打印告警并原样保留。
 - 输出 `weekly/<issue>.md`（md 与图同目录，md2html 以 md 目录为 baseDir 即可解析）。
 """
@@ -94,9 +94,9 @@ def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
         if not base:
             warnings.append(f"无法识别图片种类（应为 first/author/sleuth_merged）：{name}")
             return match.group(0)
-        src = mat / pid / f"{flat}.png"
+        src = mat / f"{pid}_files" / f"{flat}.png"
         if not src.exists():
-            warnings.append(f"material 中不存在 {pid}/{flat}.png（被引用了：{name}）")
+            warnings.append(f"material 中不存在 {pid}_files/{flat}.png（被引用了：{name}）")
             return match.group(0)
         target = f"{pid}_{flat}.png"
         if base == "sleuth_merged" and any(key in _norm(alt) for key in SLEUTH_KEYS):

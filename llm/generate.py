@@ -28,11 +28,17 @@ class GenerationBlocked(Exception):
 
 
 def material_papers(material_dir: str | Path) -> list[Path]:
-    """material 下各篇目录的 <pid>.md（按 pid 排序）。目录缺失算阻塞性失败。"""
+    """material 下各篇 <pid>_files/ 的 <pid>.md（按 pid 排序）。目录缺失算阻塞性失败。"""
     mat = Path(material_dir)
     if not mat.is_dir():
         raise GenerationBlocked(f"material 目录不存在：{mat}（先跑 material 生成图材）")
-    return sorted(p / f"{p.name}.md" for p in mat.iterdir() if p.is_dir() and (p / f"{p.name}.md").exists())
+    return sorted(mat.glob("*_files/*.md"))
+
+
+def _paper_pid(paper: Path) -> str:
+    """素材 md 所在目录名 `<pid>_files` → pid（命中 manifest 的 pubpeer_id 键）。"""
+    name = paper.parent.name
+    return name[:-len("_files")] if name.endswith("_files") else name
 
 
 def build_extract_messages(papers: Iterable[str | Path], prompt: str,
@@ -44,7 +50,7 @@ def build_extract_messages(papers: Iterable[str | Path], prompt: str,
     blocks: list[str] = []
     for paper in papers:
         text = Path(paper).read_text(encoding="utf-8")
-        info = meta.get(Path(paper).parent.name) if meta else None
+        info = meta.get(_paper_pid(Path(paper))) if meta else None
         if info:
             text = prepend_metadata(text, info)
         blocks.append(text)
@@ -99,7 +105,7 @@ def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str 
     warnings: list[str] = []
     papers = material_papers(material_dir)
     if pid:
-        papers = [p for p in papers if p.parent.name == pid]
+        papers = [p for p in papers if _paper_pid(p) == pid]
         if not papers:
             warnings.append(f"material 里没有 pid={pid} 的目录")
     if limit:

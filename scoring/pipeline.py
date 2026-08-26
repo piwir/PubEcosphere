@@ -1,7 +1,8 @@
-"""打分系统 CLI：coverage（覆盖率报告）/ rank（两阶段打分选优）。
+"""打分系统 CLI：coverage（覆盖率报告）/ enrich（每日 DOI+v3 预热）/ rank（两阶段打分选优）。
 
 用法：
     python -m scoring.pipeline coverage --db data/pubpeer.db
+    python -m scoring.pipeline enrich --db data/pubpeer.db [--limit N]
     python -m scoring.pipeline rank --db data/pubpeer.db [--stage1-only] [--window 10 3]
 """
 from __future__ import annotations
@@ -130,6 +131,34 @@ def _make_shortlist(results: list[dict], k: int) -> list[dict]:
     return out
 
 
+def _run_enrich(client, sstore, caps: list[dict], pub_doi_map: dict[str, str],
+                cfg, args, limit: int | None = None) -> tuple[list[str], int, int]:
+    """DOI 解析 + v3 预热（TTL 缓存）。返回 (dois, n_resolved, n_v3)。
+
+    caps 已由调用方过滤（rank 只传窗口内文章）；limit 先截取 caps 再算 pending（enrich 子命令用）。
+    """
+    if limit:
+        caps = caps[:limit]
+    cached_dois = sstore.doi_for([c["pubpeer_id"] for c in caps])
+    dois: list[str] = [d for d in cached_dois.values() if d]
+    n_resolved = 0
+    pending = [c for c in caps
+               if args.refresh_enrich or c["pubpeer_id"] not in cached_dois]
+    if args.verbose:
+        print(f"resolve DOI: {len(pending)} pending (parallel ×{args.enrich_workers}, "
+              f"delay {args.delay}s)", flush=True)
+    with ThreadPoolExecutor(max_workers=args.enrich_workers) as ex:
+        futs = [ex.submit(_resolve_doi_worker, cap, pub_doi_map, args.delay) for cap in pending]
+        for fut in as_completed(futs):
+            pid, doi, method, ct, cj, match = fut.result()
+            sstore.upsert_doi_resolution(pid, doi, method, ct, cj, match)
+            if doi:
+                dois.append(doi)
+                n_resolved += 1
+    n_v3 = enrich.fetch_feedback(client, sstore, dois, cfg.enrich_ttl_days, args.verbose)
+    return dois, n_resolved, n_v3
+
+
 def _coverage_rows(cas_idx, jcr_idx, ccf_idx, captures) -> list[dict]:
     cov = cas_idx.coverage(captures)
     for row in cov:
@@ -208,6 +237,27 @@ def cmd_coverage(args) -> int:
     return 0
 
 
+# ---- enrich ---------------------------------------------------------------
+
+def cmd_enrich(args) -> int:
+    """每日预热：对全部未缓存文章跑 CrossRef DOI 解析 + v3 拉取（TTL 缓存，rank 时窗口内已命中）。"""
+    cfg = config_mod.ScoringConfig()
+    sstore = ScoringStore(args.db)
+    client = PubPeerClient(ClientConfig(delay=args.delay))
+    try:
+        captures = sstore.all_captures()
+        pubs = sstore.all_publications()
+    except Exception as exc:            # noqa: BLE001 —— 无库/无 captures 表时如实报告，退出 0（仿 status）
+        print(f"enrich: DB 不可读（{exc}），跳过本轮", file=sys.stderr)
+        return 0
+    pub_doi_map = {p["pubpeer_id"]: p.get("doi") for p in pubs if p.get("doi")}
+    dois, n_resolved, n_v3 = _run_enrich(client, sstore, captures, pub_doi_map, cfg, args,
+                                         limit=args.limit)
+    print(f"enrich done: {n_resolved} DOI resolved, {n_v3} v3 feedback fetched, "
+          f"{len(dois)} cached dois", flush=True)
+    return 0
+
+
 # ---- rank -----------------------------------------------------------------
 
 def cmd_rank(args) -> int:
@@ -228,28 +278,22 @@ def cmd_rank(args) -> int:
     pub_doi_map = {pid: p.get("doi") for pid, p in pub_by_pid.items() if p.get("doi")}
     client = PubPeerClient(ClientConfig(delay=args.delay))
 
-    # ---- 1. 富集：DOI + v3 ----
-    cached_dois = sstore.doi_for([c["pubpeer_id"] for c in captures])
-    dois: list[str] = [d for d in cached_dois.values() if d]
-    n_resolved = 0
-    pending = [c for c in captures
-               if args.refresh_enrich or c["pubpeer_id"] not in cached_dois]
+    # ---- 1. 富集：DOI + v3（只对窗口内文章，非窗口信号用不上） ----
+    if args.window_dates:
+        win_caps = [c for c in captures
+                    if _in_date_range(c[args.window_field], args.window_dates[0], args.window_dates[1])]
+    elif args.window:
+        win_caps = [c for c in captures if _in_window(c[args.window_field], args.window)]
+    else:
+        win_caps = captures
     if args.verbose:
-        print(f"resolve DOI: {len(pending)} pending (parallel ×{args.enrich_workers}, "
-              f"delay {args.delay}s)", flush=True)
-    with ThreadPoolExecutor(max_workers=args.enrich_workers) as ex:
-        futs = [ex.submit(_resolve_doi_worker, cap, pub_doi_map, args.delay) for cap in pending]
-        for fut in as_completed(futs):
-            pid, doi, method, ct, cj, match = fut.result()
-            sstore.upsert_doi_resolution(pid, doi, method, ct, cj, match)
-            if doi:
-                dois.append(doi)
-                n_resolved += 1
-    n_v3 = enrich.fetch_feedback(client, sstore, dois, cfg.enrich_ttl_days, args.verbose)
+        print(f"enrich scope: {len(captures)} → {len(win_caps)} window articles", flush=True)
+
+    dois, n_resolved, n_v3 = _run_enrich(client, sstore, win_caps, pub_doi_map, cfg, args)
     if args.verbose:
         print(f"enrich: +{n_resolved} DOI resolved, {n_v3} v3 feedback fetched", flush=True)
 
-    doi_by_pid = sstore.doi_for([c["pubpeer_id"] for c in captures])
+    doi_by_pid = sstore.doi_for([c["pubpeer_id"] for c in win_caps])
     fb_by_pid = {}
     fb_all = sstore.v3_feedback([d for d in dois if d])
     for pid, doi in doi_by_pid.items():
@@ -258,7 +302,7 @@ def cmd_rank(args) -> int:
 
     # ---- 2. stage-1 打分 ----
     results: list[dict] = []
-    for cap in captures:
+    for cap in win_caps:
         jinfo = _journal_info(cas_idx, jcr_idx, ccf_idx, cap)
         fb = fb_by_pid.get(cap["pubpeer_id"])
         feats = score.stage1_features(cap, jinfo, fb, cfg, _pub_authors(pub_by_pid.get(cap["pubpeer_id"])))
@@ -386,6 +430,14 @@ def cmd_pick(args) -> int:
     return 0
 
 
+def _non_neg_int(s: str) -> int:
+    """argparse type：非负整数（负数会让 --limit/--max-total 等静默截错切片）。"""
+    v = int(s)
+    if v < 0:
+        raise argparse.ArgumentTypeError(f"必须 ≥ 0：{s}")
+    return v
+
+
 # ---- CLI ---------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
@@ -415,6 +467,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--issue", default=None, help="期号标注：报告写到 output/issue/<期号>/score/（不填则写 output/score/）")
     p.set_defaults(func=cmd_coverage)
 
+    p = sub.add_parser("enrich", parents=[common],
+                       help="每日预热：CrossRef DOI 解析 + v3 拉取（TTL 2 天缓存；rank 时窗口内自动命中）")
+    p.add_argument("--limit", type=_non_neg_int, default=None, help="本轮最多处理前 N 条捕获（默认全部；测试用）")
+    p.add_argument("--refresh-enrich", action="store_true", help="强制刷新 DOI/v3 缓存")
+    p.set_defaults(func=cmd_enrich)
+
     p = sub.add_parser("rank", parents=[common], help="两阶段打分：粗筛全部 → 短名单深度回访")
     p.add_argument("--issue", default=None, help="期号标注：报告写到 output/issue/<期号>/score/（不填则写 output/score/）")
     p.add_argument("--run-id", default=None, help="报告日期，默认今天")
@@ -430,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--window-field", choices=("last_commented", "captured_at"),
                    default="last_commented",
                    help="--window 作用的日期字段（默认 last_commented；按首次捕获选期用 captured_at）")
-    p.add_argument("--max-per-cat", type=int, default=5, help="每大类短名单上限")
+    p.add_argument("--max-per-cat", type=_non_neg_int, default=5, help="每大类短名单上限")
     p.add_argument("--include-published", action="store_true",
                    help="把已发布（published 表）文章也纳入打分（默认排除）")
     p.add_argument("--refresh-enrich", action="store_true", help="强制刷新 DOI/v3 缓存")
@@ -441,16 +499,16 @@ def main(argv: list[str] | None = None) -> int:
                        help="每类选 picks，收集 md+图片到 output/issue/<issue>/，标记已发布")
     p.add_argument("--issue", required=True, metavar="期号", help="期号标注（测试用 -1）")
     p.add_argument("--run-id", default=None, help="打分 run 日期，默认取最新")
-    p.add_argument("--picks-per-cat", type=int, default=None, help="每类至多取几篇（默认 2）")
-    p.add_argument("--small-cat-threshold", type=int, default=None,
+    p.add_argument("--picks-per-cat", type=_non_neg_int, default=None, help="每类至多取几篇（默认 2）")
+    p.add_argument("--small-cat-threshold", type=_non_neg_int, default=None,
                    help="候选少于多少视为小类（默认 5）")
-    p.add_argument("--small-cat-pick", type=int, default=None, help="小类取几篇（默认 1）")
+    p.add_argument("--small-cat-pick", type=_non_neg_int, default=None, help="小类取几篇（默认 1）")
     p.add_argument("--min-score", type=float, default=None,
                    help="最终分低于此值不选（默认 config min_pick_score=0.45）")
-    p.add_argument("--min-images", type=int, default=None,
+    p.add_argument("--min-images", type=_non_neg_int, default=None,
                    help="评论图片少于此值不选（默认 config min_pick_images=1）")
-    p.add_argument("--max-total", type=int, default=None,
-                   help="每期入选总数上限（默认 config max_picks_total=25；0 = 不限）")
+    p.add_argument("--max-total", type=_non_neg_int, default=None,
+                   help="每期入选总数上限（默认 config max_picks_total=10；0 = 不限）")
     p.add_argument("--dry-run", action="store_true", help="只打印将选的 picks，不写文件不标记")
     p.set_defaults(func=cmd_pick)
 

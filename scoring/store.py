@@ -231,7 +231,7 @@ class ScoringStore:
     # ---- 爬虫表只读访问（不建表、不改动） ---------------------------------
 
     def all_captures(self) -> list[dict]:
-        cur = self.conn.execute("SELECT * FROM captures")
+        cur = self.conn.execute("SELECT * FROM captures ORDER BY captured_at DESC")
         return _rows(cur)
 
     def all_publications(self) -> list[dict]:

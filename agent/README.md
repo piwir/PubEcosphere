@@ -40,7 +40,7 @@ python -m agent.mcp_server --selftest    # 进程内 JSON-RPC 往返 8 项
 python -m agent.mcp_server --list-tools
 ```
 
-## 工具清单（14 个）
+## 工具清单（13 个）
 
 | 工具 | 参数（必填加粗） | 行为 / 产物 | 门槛指引 |
 | --- | --- | --- | --- |
@@ -49,9 +49,8 @@ python -m agent.mcp_server --list-tools
 | `capture` | max_offset? | 每日捕获 feed（/api/recent 约 400 条） | 独立每日操作；生产由**长期 cron 供给**，`run_issue.sh` 默认不跑 |
 | `revisit` | window?, window_dates?, limit? | 回访完整评论线程（幂等 upsert，可断点续跑） | 同上，默认由 cron 供给 |
 | `rank` | **issue**, window?, window_dates?, window_field?, run_id? | 两阶段打分 → `output/issue/<n>/score/<run_id>/`；正整数期号不传 window 时自动按期号推绝对窗口 | 停等人工审短名单 |
-| `pick` | **issue**, min_score?, max_total?, dry_run? | 每类选稿（总数上限 max_total，默认 25）+ 当期下载评论图 + manifest | **先 dry_run=true 预览，确认分数线后再正式选** |
-| `material` | **issue**, max_images? | 三图合并 → `output/issue/<n>/material/` | 清场重建 |
-| `flatten` | **issue** | 摊平 upload 文件夹 → `output/issue/<n>/upload/` | 流水线步骤，亦可供人工手动上传 |
+| `pick` | **issue**, min_score?, max_total?, dry_run? | 每类选稿（总数上限 max_total，默认 10）+ 当期下载评论图 + manifest | **先 dry_run=true 预览，确认分数线后再正式选** |
+| `material` | **issue**, max_images? | 三图合并 + 结构化素材 md 写回 `output/issue/<n>/pub/<pid>_files/`（源图合并后删除） | 已处理篇跳过；重跑需先重 pick 清 pub/ |
 | `generate` | **issue**, assemble?, model?, dry_run?, week_start? | 单模型提取+写稿 → `weekly/stageA_combined.md` + `_draft.md`；自动注入 WEEK_START | **草稿需人工审核**；需 API key |
 | `assemble` | **issue**, dry_run? | 排版成品 md + 图复制 | 审完草稿后调 |
 | `md2html` | **md_path**(限 output/), keep_title?, theme?, check? | md → 微信兼容 HTML（vendored 转换器） | — |
@@ -61,7 +60,7 @@ python -m agent.mcp_server --list-tools
 
 ## 状态机（status 推导 next_step）
 
-`captured → ranked（score/ 有 run 目录）→ picked（manifest.json）→ materialized（material/index.md）→ flattened（upload/ 非空）→ drafted+assembled（weekly/stageA_combined.md + <n>.md）→ html（<n>.html）→ base64（<n>-base64.html）→ ready_to_publish`
+`captured → ranked（score/ 有 run 目录）→ picked（manifest.json）→ materialized（pub/index.md）→ drafted+assembled（weekly/stageA_combined.md + <n>.md）→ html（<n>.html）→ base64（<n>-base64.html）→ ready_to_publish`
 
 某期卡住时 `status --issue <n>` 会直接告诉你下一步该调哪个工具。
 
@@ -78,7 +77,7 @@ python -m agent.mcp_server --list-tools
 agent/
 ├── mcp_server.py    # stdio MCP 协议（JSON-RPC 2.0 子集：initialize/ping/tools/list/tools/call）
 ├── runner.py        # run_cli：list-arg subprocess，repo_root 自推导
-├── tools.py         # 14 工具：参数校验 → 命令构造 → 执行
+├── tools.py         # 13 工具：参数校验 → 命令构造 → 执行
 └── __main__.py      # python -m agent 委托
 ```
 

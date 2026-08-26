@@ -73,11 +73,13 @@ class ScoringConfig:
     )
 
     # ---- 每期 picks：短名单选优后每类取几篇当周报素材 ----
-    picks_per_cat: int = 2          # 每类至多取 2 篇
+    picks_per_cat: int = 2          # 每类至多取 2 篇（一个学科门类一个 ## 章节，其下可多篇）
     small_cat_threshold: int = 5    # 候选 < 此值视为「比较少的小类」
     small_cat_pick: int = 1         # 小类只取 1 篇
-    max_picks_total: int = 25       # 每期入选总数上限（用户拍板 ~25 篇）：每类选完后超出按
-                                    # final 分降序裁剪；0/None = 不限（候选不足则全选，无下限）
+    max_picks_total: int = 10       # 每期入选总数上限（用户拍板 ~10 篇）：每类选完后超出则裁剪——
+                                    # 每个门类至少保 1 篇（该类最高分，仅门类数 ≤ 上限时成立），
+                                    # 剩余名额按 final 分降序补第 2 篇，尽量覆盖 ≥7 个门类；
+                                    # 0/None = 不限（候选不足则全选，无下限）
 
     # ---- pick 选稿门槛：低分 / 无图文章不再入选（无后续推文价值） ----
     min_pick_score: float = 0.45    # final_score 低于此值不选

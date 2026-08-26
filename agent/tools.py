@@ -148,26 +148,16 @@ def _pick(args: dict) -> CmdSpec:
 def _material(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
     argv = [PY, "-m", "scoring.material",
-            "--pub-dir", f"{_issue_dir(n)}/pub",
-            "--out", f"{_issue_dir(n)}/material"]
+            "--pub-dir", f"{_issue_dir(n)}/pub"]
     if args.get("max_images"):
         argv += ["--max-images", str(int(args["max_images"]))]
-    return CmdSpec(argv)
-
-
-def _flatten(args: dict) -> CmdSpec:
-    n = _issue(args["issue"])
-    argv = [PY, "-m", "llm", "flatten",
-            "--material-dir", f"{_issue_dir(n)}/material",
-            "--upload-dir", f"{_issue_dir(n)}/upload",
-            "--manifest", f"{_issue_dir(n)}/manifest.json"]
     return CmdSpec(argv)
 
 
 def _generate(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
     argv = [PY, "-m", "llm", "generate",
-            "--material-dir", f"{_issue_dir(n)}/material",
+            "--material-dir", f"{_issue_dir(n)}/pub",
             "--weekly-dir", f"{_issue_dir(n)}/weekly",
             "--issue", n]
     if args.get("assemble"):
@@ -185,7 +175,7 @@ def _generate(args: dict) -> CmdSpec:
 def _assemble(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
     argv = [PY, "-m", "llm", "assemble",
-            "--material-dir", f"{_issue_dir(n)}/material",
+            "--material-dir", f"{_issue_dir(n)}/pub",
             "--weekly-dir", f"{_issue_dir(n)}/weekly",
             "--issue", n]
     if args.get("dry_run"):
@@ -286,23 +276,19 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
         "⚠ 人工门槛：先 dry_run=true 预览（只打印将选的 picks），经人工确认分数线后再 dry_run=false 正式选。",
         _schema({"issue": {"type": "string", "description": "期号"},
                  "min_score": {"type": "number", "description": "分数门槛（默认 0.50，与 run_issue.sh 一致）"},
-                 "max_total": {"type": "integer", "description": "每期入选总数上限（默认 25，超出按 final 分降序裁剪；0 = 不限）"},
+                 "max_total": {"type": "integer", "description": "每期入选总数上限（默认 10：每门类至少 1 篇、尽量覆盖 ≥7 个门类，剩余名额按分补第 2 篇；0 = 不限）"},
                  "dry_run": {"type": "boolean", "description": "只预览不下载（默认 false）"}},
                 required=["issue"]),
         _pick),
     ToolDef(
         "material",
         "图材整理：每篇三类合并图（first/author/sleuth，每张至多 4 张源图、超限拆 _N），"
-        "输出 output/issue/<n>/material/。清场重建（幂等）。",
+        "合并图 + 结构化素材 md 写回 output/issue/<n>/pub/<pid>_files/（源图合并后删除）。"
+        "已处理的篇跳过（幂等）；重跑需先重 pick 清 pub/。",
         _schema({"issue": {"type": "string", "description": "期号"},
                  "max_images": {"type": "integer", "description": "每张合并图最多源图数（默认 4）"}},
                 required=["issue"]),
         _material),
-    ToolDef(
-        "flatten",
-        "摊平素材文件夹：扁平 <pid>_<kind>[_N].png → output/issue/<n>/upload/（流水线步骤，亦可供人工手动上传）。",
-        _schema({"issue": {"type": "string", "description": "期号"}}, required=["issue"]),
-        _flatten),
     ToolDef(
         "generate",
         "单模型提取+写稿（DeepSeek 无多模态，图片描述用评论者原话）。"
@@ -349,7 +335,7 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
     ToolDef(
         "run_issue",
         "整期便捷工具：一键跑 run_issue.sh（capture/revisit 可选、数据由长期 cron 爬虫供给、"
-        "脚本默认不跑爬虫；rank → pick → material → flatten → "
+        "脚本默认不跑爬虫；rank → pick → material → "
         "generate → md2html → polish → inline_images）。dry_run=true 只预览 pick 结果。"
         "⚠ 每道人工门槛（分数线/草稿审核/微信推送）仍需人工确认。",
         _schema({"issue": {"type": "string", "description": "期号"},

@@ -40,7 +40,7 @@ python -m crawler.crawl --db data/pubpeer.db revisit --limit 50  # 回访
 ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
 ```
 
-脚本流程（**数据由 cron 爬虫供给，脚本默认不跑爬虫**）：`capture/revisit(可选) → rank → pick→ material → flatten → generate/assemble → md2html → polish_html → inline_images(base64)`。
+脚本流程（**数据由 cron 爬虫供给，脚本默认不跑爬虫**）：`capture/revisit(可选) → rank → pick → material → generate/assemble → md2html → polish_html → inline_images(base64)`。
 
 常用环境变量（完整见 [run_issue.sh](run_issue.sh) 头部注释）：
 
@@ -54,7 +54,7 @@ ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
 | `RUN_REVISIT` | `0` | `1` = 先跑回访 revisit（默认 0：数据由长期 cron 爬虫供给，脚本只管生成） |
 | `DRY_RUN` | `0` | `1` = 只预览 pick |
 
-每期产物在 `output/issue/<期号>/`：`score/`（打分报告）、`pub/` + `manifest.*`（素材与清单）、`material/`（图材）、`upload/`（扁平素材夹）、`weekly/`（周报成品 + `*-base64.html` 微信粘贴用）。不用脚本时各步骤的单条命令见 `run_issue.sh` 头注释与 [agent/README.md](agent/README.md)。
+每期产物在 `output/issue/<期号>/`：`score/`（打分报告）、`pub/` + `manifest.*`（素材与清单；图材合并图与结构化素材 md 写回 `pub/<pid>_files/`）、`weekly/`（周报成品 + `*-base64.html` 微信粘贴用）。不用脚本时各步骤的单条命令见 `run_issue.sh` 头注释与 [agent/README.md](agent/README.md)。
 
 ## LLM 周报生成
 
@@ -95,7 +95,7 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 **其他 MCP 客户端**：在 MCP 配置里添加同样命令（server 自推导仓库根，无需指定 cwd）。
 
-**使用建议**：agent 起步先 `status` 自查，`pick` 先 `dry_run=true` 给人工批准，`generate` 后人工审草稿。14 个工具详见 [agent/README.md](agent/README.md)。
+**使用建议**：agent 起步先 `status` 自查，`pick` 先 `dry_run=true` 给人工批准，`generate` 后人工审草稿。13 个工具详见 [agent/README.md](agent/README.md)。
 
 ## 网站
 

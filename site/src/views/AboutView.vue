@@ -4,7 +4,7 @@ import site from '../data/site.json'
 const steps = [
   { name: 'capture / revisit', desc: '每日捕获 PubPeer feed，7 天回访提取完整评论线程，SQLite 存储' },
   { name: 'rank / pick', desc: '两阶段打分（廉价粗筛全部 → 短名单深度精筛），每类选 1–2 篇' },
-  { name: 'material / flatten', desc: '图材合并（每张至多 4 源图、超限拆 _N）→ 扁平素材夹' },
+  { name: 'material', desc: '图材合并（每张至多 4 源图、超限拆 _N）+ 结构化素材 md，写回 pub/' },
   { name: 'generate', desc: '单模型 LLM 提取 + 写稿 → 周报草稿，人工审核' },
   { name: 'md2html / 微信', desc: '转微信兼容 HTML、图片 base64 内联 → 手动粘贴发布' },
 ]

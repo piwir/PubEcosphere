@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import json
+import random
 import urllib.parse
 from datetime import datetime, timezone
 
 from .cas import issn_key, name_key
 
-# CrossRef 礼貌池标识
-_CROSSREF_MAILTO = "pubecosphere@example.com"
+# CrossRef 礼貌池标识：邮箱每进程随机化（防按邮箱限流），进程内只生成一次
+_CROSSREF_MAILTO = f"PubEco{random.randrange(10**6, 10**7)}@example.com"
 
 
 def _normalize_v3_time(s: str | None) -> str | None:

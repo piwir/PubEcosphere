@@ -2,20 +2,21 @@
 
 用法：
     python -m scoring.material --pub-dir output/issue/-1/pub \
-        --issue-dir output/issue/-1 --out output/issue/-1/material
+        --issue-dir output/issue/-1
 
-输入是 issue.py pick 的产物（pub/<pid>_files/ 下 md 与评论图同目录），输出到
-<out>/<pid>/ 的图材夹，供后续 LLM 周报生成当素材：
+输入是 issue.py pick 的产物（pub/<pid>_files/ 下 md 与评论图同目录），合并图与
+结构化素材 md **写回 pub/<pid>_files/**（md 与图同目录、裸文件名约定不变），
+源图合并完成后删除——pub/ 只保留合并后的图片。
 
-1. 图片路径修正：export/issue 已保证 md 与图片同在 <pid>_files/ 下，链接为裸文件名，
-   本模块把选定图片与结构化 md 归到同一目录 <pid>/。
-2. 多图合并，每张合并图默认至多 4 张源图（均匀网格、白底、细灰边框，避免塞太多看不清楚）；
+1. 多图合并，每张合并图默认至多 4 张源图（均匀网格、白底、细灰边框，避免塞太多看不清楚）；
    超限自动拆多张：第 0 张 `first_merged.png`，第 N 张 `first_merged_N.png`。
    每篇三类各自拆分，合并图总数允许超过 3：
    - first_merged[_N].png   最早提出质疑的评论者（首位质疑人）发的图；
    - author_merged[_N].png  若有作者回应，作者回应的图；
    - sleuth_merged[_N].png  若有知名打假人且与首位质疑人不同，其图再合并备用。
-3. 结构化输出：<out>/index.md（清单）+ <out>/<pid>/<pid>.md（每篇素材，内嵌合并图）。
+2. 结构化输出：pub/index.md（清单）+ pub/<pid>_files/<pid>.md（每篇素材，内嵌合并图，
+   覆盖 pick 阶段的完整评论 md；已处理的篇以「## 质疑人证据图（推文用）」标记跳过，
+   单独重跑 material 不会解析降级——重跑需先重 pick 清 pub/）。
 
 打假人判定复用 signals.matches_sleuth（精确别名匹配，名单在 config.ScoringConfig.sleuths）。
 """
@@ -24,7 +25,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -289,6 +289,8 @@ def _paper_md(pid: str, meta: dict, first: Comment, sleuth: Comment | None,
     sleuth_fig = f"（合并 {sleuth_n_img} 张源图）" if sleuth_n_img else ""
     author_fig = f"（合并 {author_n_img} 张源图）" if author_n_img else ""
     lines = [f"# {meta.get('title') or pid}", f"- 期刊：{meta.get('journal') or '-'}"]
+    if meta.get("category"):
+        lines.append(f"- 分类：{meta['category']}")
     if meta.get("impact"):
         lines.append(f"- IF：{meta['impact']}")
     lines += [
@@ -316,13 +318,51 @@ def _paper_md(pid: str, meta: dict, first: Comment, sleuth: Comment | None,
     return "\n".join(lines) + "\n"
 
 
-def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
+def _index_from_md(pid: str, md_text: str) -> dict:
+    """已处理篇（marker 跳过）→ 供 index 渲染的结果字典（从结构化 md 解析）。"""
+    m_title = re.search(r"^# (.+)$", md_text, re.M)
+
+    def meta_line(key: str) -> str | None:
+        m = re.search(rf"^- {key}：(.+)$", md_text, re.M)
+        return m.group(1).strip() if m else None
+
+    m_q = re.search(r"^- 质疑人：(.+)（最早质疑 (.+?)，共 \d+ 条评论）$", md_text, re.M)
+    sleuth_raw = meta_line("知名打假人")
+    m_a = re.search(r"^- 作者回应：是（共 (\d+) 条评论）$", md_text, re.M)
+    paths: dict[str, list[Path]] = {"first": [], "sleuth": [], "author": []}
+    for m in re.finditer(r"!\[[^\]]*\]\(([^)]+\.png)\)", md_text):
+        name = Path(m.group(1)).name
+        for kind, key in (("first_merged", "first"), ("sleuth_merged", "sleuth"),
+                          ("author_merged", "author")):
+            if name == f"{kind}.png" or re.match(rf"^{re.escape(kind)}_\d+\.png$", name):
+                paths[key].append(Path(name))
+                break
+    return {
+        "pubpeer_id": pid, "title": m_title.group(1).strip() if m_title else pid,
+        "journal": meta_line("期刊"), "category": meta_line("分类"),
+        "questioner": m_q.group(1) if m_q else "-",
+        "first_at": m_q.group(2) if m_q else "-",
+        "sleuth": None if sleuth_raw in (None, "无") else sleuth_raw,
+        "author_n": int(m_a.group(1)) if m_a else 0,
+        "first_paths": paths["first"], "sleuth_paths": paths["sleuth"],
+        "author_paths": paths["author"],
+        "first_n_img": len(paths["first"]), "sleuth_n_img": len(paths["sleuth"]),
+        "author_n_img": len(paths["author"]),
+        "md_rel": f"{pid}_files/{pid}.md",
+    }
+
+
+def build_material(pub_dir: Path, issue_dir: Path | None = None,
                    sleuths: tuple = ScoringConfig.sleuths, dry_run: bool = False,
                    max_images: int = 4, max_cell_w: int = 1000, max_cell_h: int = 800,
                    cols: int | None = None) -> list[dict]:
-    """从 pub/ 素材夹生成图材夹。返回每篇的处理结果（含路径与图数，供 index 渲染）。"""
+    """从 pub/ 素材夹生成图材：合并图 + 结构化 md **写回 pub/<pid>_files/**，删源图。
+
+    已处理的篇（md 含「## 质疑人证据图（推文用）」标记）跳过——单独重跑不解析降级，
+    但会解析其结构化 md 回填 index 条目（重跑不清空清单）。重跑完整重建需先重 pick 清 pub/。
+    返回每篇的处理结果（含路径与图数，供 index 渲染）。
+    """
     pub_dir = Path(pub_dir)
-    out_root = Path(out_root)
 
     # 可选：读 issue 的 manifest.json 补充类别/分数/期刊等展示字段
     manifest: dict = {}
@@ -336,6 +376,10 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
         pid = md_path.stem
         files_dir = md_path.parent
         md = md_path.read_text(encoding="utf-8")
+        if "## 质疑人证据图（推文用）" in md:
+            print(f"  {pid}: 已处理（结构化素材 md 已生成，跳过；如需重跑先重 pick 清 pub/）")
+            results.append(_index_from_md(pid, md))
+            continue
         comments = parse_comments(md)
         non_author = [c for c in comments if not c.is_author]
         if not non_author:
@@ -379,8 +423,7 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
 
         if not dry_run:
             imgs_on_disk = _images_on_disk(files_dir)
-            work_dir = out_root / pid
-            work_dir.mkdir(parents=True, exist_ok=True)
+            work_dir = files_dir   # 写回 pub/<pid>_files/：md 与图同目录、裸文件名约定不变
 
             first_paths = [imgs_on_disk[n] for n in first_imgs if n in imgs_on_disk]
             result["first_paths"] = merge_images(first_paths, work_dir / "first_merged.png",
@@ -410,8 +453,15 @@ def build_material(pub_dir: Path, out_root: Path, issue_dir: Path | None = None,
                                 [p.name for p in result["sleuth_paths"]],
                                 [p.name for p in result["author_paths"]],
                                 first_block, sleuth_block, author_bodies)
+            # 写回顺序：合并图全部成功 → 覆盖结构化 md → 删源图（中途失败保留旧 md + 源图可重跑）
             (work_dir / f"{pid}.md").write_text(content, encoding="utf-8")
-            result["md_rel"] = f"{pid}/{pid}.md"
+            result["md_rel"] = f"{pid}_files/{pid}.md"
+            merged = {p.name for p in [*result["first_paths"], *result["sleuth_paths"],
+                                       *result["author_paths"]]}
+            for f in files_dir.iterdir():
+                if (f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp")
+                        and f.name not in merged):
+                    f.unlink()
 
         results.append(result)
         print(f"  {pid}: 质疑人 {first.alias} · 最早 {first.when}"
@@ -427,7 +477,7 @@ def _img_links(pid: str, paths: list[Path]) -> str:
     """index 里某类的合并图链接：多张合并图依次列出（first_merged.png / first_merged_2.png）。"""
     if not paths:
         return "-"
-    return " ".join(f"[图]({pid}/{p.name})" for p in paths)
+    return " ".join(f"[图]({pid}_files/{p.name})" for p in paths)
 
 
 def _index_md(issue: str, results: list[dict]) -> str:
@@ -459,7 +509,6 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="PubEcosphere 图材整理：质疑人/作者/打假人图合并 + 结构化 md")
     ap.add_argument("--pub-dir", default="output/issue/-1/pub", help="pick 素材夹（含 <pid>_files/ md+图片）")
     ap.add_argument("--issue-dir", default=None, help="issue 目录（读 manifest.json 补分类/分数），默认取 pub-dir 上级")
-    ap.add_argument("--out", default="output/issue/-1/material", help="图材输出目录")
     ap.add_argument("--max-images", type=int, default=4, help="每张合并图最多合并的源图数，超限自动拆 *_2.png 等")
     ap.add_argument("--max-cell-w", type=int, default=1000, help="合并图中单张源图最大宽度（px）")
     ap.add_argument("--max-cell-h", type=int, default=800, help="合并图中单张源图最大高度（px）")
@@ -469,22 +518,19 @@ def main(argv: list[str] | None = None) -> int:
 
     issue_dir = Path(args.issue_dir) if args.issue_dir else Path(args.pub_dir).parent
     issue = issue_dir.name
-    out_root = Path(args.out)
+    pub_dir = Path(args.pub_dir)
 
-    if not args.dry_run:
-        # 整体重建：清掉历史残留合并图再重跑（手工删除约定已代码化）
-        shutil.rmtree(out_root, ignore_errors=True)
-        out_root.mkdir(parents=True, exist_ok=True)
+    # 写回模式：合并图与结构化 md 直接写进 pub/<pid>_files/，无需清场（pick 清 pub/ 兜底）
 
     cfg = ScoringConfig()
-    results = build_material(Path(args.pub_dir), out_root, issue_dir=issue_dir,
+    results = build_material(pub_dir, issue_dir=issue_dir,
                              sleuths=cfg.sleuths, dry_run=args.dry_run,
                              max_images=args.max_images, max_cell_w=args.max_cell_w,
                              max_cell_h=args.max_cell_h, cols=args.cols)
     if not args.dry_run:
-        (out_root / "index.md").write_text(_index_md(issue, results), encoding="utf-8")
+        (pub_dir / "index.md").write_text(_index_md(issue, results), encoding="utf-8")
     n_img = sum(1 for r in results if r["first_paths"] or r["sleuth_paths"] or r["author_paths"])
-    suffix = f" → {out_root}" if not args.dry_run else "（dry-run）"
+    suffix = f" → {pub_dir}" if not args.dry_run else "（dry-run）"
     print(f"material done: {len(results)} papers with material, {n_img} with merged images{suffix}",
           flush=True)
     return 0

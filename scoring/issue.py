@@ -100,7 +100,9 @@ def select_picks(rows: list[dict], published_other: set[str], cfg) -> tuple[list
         - final_score < cfg.min_pick_score → 不选（低分无后续推文价值）；
         - 评论无图片（has_image < cfg.min_pick_images）→ 不选；has_image=None（stage-1）不过滤。
     过滤后再按类别分组，小类阈值/每类取篇数规则不变；
-    每类选完后若总数超过 cfg.max_picks_total（>0）则跨类按 final 分降序裁剪。
+    每类选完后若总数超过 cfg.max_picks_total（>0）则裁剪：先保证门类多样性——
+    每个门类至少保留 1 篇（该类最高分，门类数不超过上限时成立），剩余名额按 final 分
+    降序补给各门类第 2 篇（每类至多 picks_per_cat 篇），尽量覆盖 ≥7 个不同门类（用户拍板）。
     """
     grouped: dict[str, list[dict]] = {}
     for r in rows:
@@ -119,8 +121,17 @@ def select_picks(rows: list[dict], published_other: set[str], cfg) -> tuple[list
         take = cfg.picks_per_cat if len(avail) >= cfg.small_cat_threshold else cfg.small_cat_pick
         picks.extend(avail[:take])
     if cfg.max_picks_total and len(picks) > cfg.max_picks_total:
-        # 全局上限：跨类按 final 分降序裁到 max_picks_total（硬上限、无下限）
-        picks = sorted(picks, key=lambda r: -r["final_score"])[:cfg.max_picks_total]
+        # 全局上限：每类先保 1 篇（该类最高分），剩余名额按 final 分降序给第 2 篇
+        by_cat: dict[str, list[dict]] = {}
+        for p in picks:
+            by_cat.setdefault(p["category"], []).append(p)
+        firsts = [sorted(v, key=lambda r: -r["final_score"])[0] for v in by_cat.values()]
+        if len(firsts) >= cfg.max_picks_total:
+            picks = sorted(firsts, key=lambda r: -r["final_score"])[:cfg.max_picks_total]
+        else:
+            seconds = sorted((v[1] for v in by_cat.values() if len(v) > 1),
+                             key=lambda r: -r["final_score"])
+            picks = firsts + seconds[:cfg.max_picks_total - len(firsts)]
     return picks, grouped
 
 
@@ -184,7 +195,8 @@ def build_issue(sstore: ScoringStore, client: PubPeerClient, run_id: str, issue:
 
     issue_dir = out_root / "issue" / str(issue)
     pub_dir = issue_dir / "pub"
-    # 只清 pick 自己的输出（pub/ + manifest.*），不动 material/upload/weekly（归后面命令）
+    # 只清 pick 自己的输出（pub/ + manifest.*），不动 weekly/（归后面命令）；
+    # material 的合并图也写回 pub/，重跑 pick 即整体重建
     if pub_dir.exists():
         shutil.rmtree(pub_dir)
     for name in ("manifest.json", "manifest.md"):

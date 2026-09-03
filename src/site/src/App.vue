@@ -15,7 +15,8 @@ const base = import.meta.env.BASE_URL
         </RouterLink>
         <nav class="nav" aria-label="主导航">
           <RouterLink to="/" exact-active-class="is-active">首页</RouterLink>
-          <RouterLink to="/archive" active-class="is-active">归档</RouterLink>
+          <RouterLink to="/weekly" active-class="is-active">周报</RouterLink>
+          <RouterLink to="/ai4s" active-class="is-active">AI4S</RouterLink>
           <RouterLink to="/about" active-class="is-active">关于</RouterLink>
         </nav>
       </div>

@@ -350,6 +350,13 @@ a { color: var(--ink); }
   white-space: nowrap;
 }
 
+.row-soon {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* ---------- 关于 ---------- */
 
 .about { padding: 56px 0 24px; max-width: 720px; }

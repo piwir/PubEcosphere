@@ -8,7 +8,7 @@
   <a href="images/QR.png"><b>微信公众号</b></a>
 </p>
 
-基于 PubPeer（pubpeer.com）公开评论，抓取存在**作者与打假人激烈交锋**的论文，多维度打分排序，由大模型生成周报；整条流水线封装成 **MCP server**，可挂载到**个人 agent** 作为组件使用。
+基于 PubPeer（pubpeer.com）公开评论，抓取存在**作者与打假人激烈交锋**的论文，多维度打分排序，由大模型生成周报；流水线提供 **MCP server** 与 **subagent 提示词**（`src/agent/`）。
 
 ## 项目简介
 
@@ -17,7 +17,7 @@
 - **自动监控** PubPeer 高关注论文的评论动态
 - **智能打分** 筛选值得报道的「激烈交锋」案例
 - **周报化** 由大模型生成 HelloGitHub 式周报
-- **MCP 组件化** 流水线封装成 MCP server，可挂载到个人 agent 部署使用
+- **Agent 化** 流水线封装为 MCP server + subagent 
 
 ## 核心工作流
 
@@ -72,13 +72,13 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 单模型路径变量：`PUBECOSPHERE_LLM_MODEL`（默认 deepseek-v4-flash）、`PUBECOSPHERE_LLM_MAX_TOKENS`（默认顶满模型上限）。
 
-## MCP 集成（agent 组件）
+## Agent 集成
 
-流水线封装成 **MCP server**，可挂载到任何 MCP 客户端当作一个组件使用。Server 是无状态薄层：智能在确定性 CLI + 机器可读状态（`status`）+ 明确退出码里，工具只做转发。
+同一套 CLI 与写稿提示词，两种挂载形态：**MCP server**（16 个确定性工具，供定时/无头客户端）与 **subagent 系统提示词**（交互式 agent，全流程编排 + 写稿一体）。确定性步骤走 CLI/MCP 工具，写稿默认由 subagent 本体按 `docs/prompts/` 提示词完成，「走 API」时用 `generate` / `pubai4s_run`。
 
-**前提**：`pip install -e .`；`cd src/vendor/md2html-cli && npx -y bun install`（首次联网拉传递依赖一次）；`.env` 配 `PUBECOSPHERE_LLM_API_KEY`（仅 `generate` 需要）。
+**前提**：`pip install -e .`；推文流水线另需 `pip install -e submodules/PubAI4S`；`cd src/vendor/md2html-cli && npx -y bun install`（首次联网拉传递依赖一次）；`.env` 配 `PUBECOSPHERE_LLM_API_KEY`（仅「走 API」模式需要）。
 
-**挂载**（任何 MCP 客户端的 MCP 配置里添加，必须**绝对路径**启动脚本）：
+**MCP 挂载**（客户端的 MCP 配置里添加，必须**绝对路径**启动脚本）：
 
 ```json
 {
@@ -91,11 +91,12 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 }
 ```
 
-> 客户端健康检查时 cwd=`/`、PATH 无 conda，`src/agent/mcp.sh` 负责自切仓库根 + 解析 python；找不到 python 时加 `"env": {"PYTHON": "/path/to/python"}`。
+**Subagent 挂载**：把对应文件内容作为 subagent 的系统提示词加载，工作目录指向仓库根，授予 Bash / Read / Write / Edit / Glob / Grep 权限：
 
-**其他 MCP 客户端**：在 MCP 配置里添加同样命令（server 自推导仓库根，无需指定 cwd）。
+- `src/agent/pubecosphere-weekly.md` — 周报全流程：status 查询 → rank 打分 → pick 选稿（先 dry-run 等人工确认）→ 图材 → 写稿 → 排版渲染；
+- `src/agent/pubai4s-post.md` — AI4S 项目推文：fetch 抓取 → 材料提取 → 写稿 → 渲染 base64 成品。
 
-**使用建议**：agent 起步先 `status` 自查，`pick` 先 `dry_run=true` 给人工批准，`generate` 后人工审草稿。13 个工具详见 [agent/README.md](src/agent/README.md)。
+**使用建议**：agent 起步先 `status` 自查，`pick` 先 dry-run 给人工批准，草稿生成后人工审核再发布。工具清单与两形态分工详见 [agent/README.md](src/agent/README.md)。
 
 ## 网站
 
@@ -132,7 +133,7 @@ PubEcosphere/
 │   ├── crawler/          # 爬虫模块
 │   ├── scoring/          # 打分系统
 │   ├── llm/              # LLM 周报生成
-│   ├── agent/            # MCP server
+│   ├── agent/            # MCP server + subagent 提示词
 │   ├── site/             # 官网前端
 │   ├── vendor/           # md→html 转换器
 │   └── repopath.py       # 仓库根定位
@@ -150,7 +151,7 @@ PubEcosphere/
 | 文档 | 内容 |
 | --- | --- |
 | `docs/prompts/` | 文本提取 / 写稿 两套提示词 |
-| `src/agent/README.md` | MCP 工具详细文档 |
+| `src/agent/README.md` | MCP 工具 + subagent 提示词说明 |
 | `src/site/README.md` | 网站说明 |
 
 ## 免责声明

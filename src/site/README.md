@@ -13,6 +13,12 @@ Vue 3 + Vite + vue-router（hash 路由），无 UI 库、手写 CSS。构建产
 
 push 后 GitHub Actions 自动重新部署。
 
+## AI4S 页更新（同文件手动维护）
+
+推文发布后编辑 `src/data/site.json` 的 `ai4s` 字段：`posts` 数组头部加一条
+`{ "no": N, "repo": "owner/repo", "name": "项目名", "date": "YYYY-MM-DD", "summary": "一句话摘要", "url": "公众号链接" }`；
+未发布的推文 `url` 留空（页面显示「即将发布」）。
+
 **隐私**：site.json 随仓库公开——只放期号/日期/窗口/链接/中性摘要，
 不放周报正文、pubpeer id、打假人姓名。
 

@@ -1,6 +1,4 @@
-# PubEcosphere 打包配置（src 布局）。
-# 安装：pip install -e .   可编辑安装后 python -m crawler.xxx / scoring.pipeline /
-# llm / agent.mcp_server 在任何目录可用。运行时依赖仅 Pillow，其余纯标准库。
+# PubEcosphere 打包配置。
 [build-system]
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
@@ -8,7 +6,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pubecosphere"
 version = "0.1.0"
-description = "PubPeer 学术诚信周报生成管线（crawler / scoring / llm / agent MCP）"
+description = "PubPeer 学术诚信周报生成管线"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

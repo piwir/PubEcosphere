@@ -2,14 +2,20 @@
   "siteName": "PubEcosphere",
   "tagline": "PubPeer 学术诚信周报 · 每周三更新",
   "github": "https://github.com/piwir/PubEcosphere",
-  "currentIssue": 3,
-  "issueDate": "2026-08-26",
-  "window": "2026-08-17 – 2026-08-23",
+  "currentIssue": 4,
+  "issueDate": "2026-09-02",
+  "window": "2026-08-24 – 2026-08-30",
   "wechat": {
-    "url": "https://mp.weixin.qq.com/s/x1sfWGiBFJpvjPMnXbynWw",
-    "label": "阅读第 3 期周报"
+    "url": "https://mp.weixin.qq.com/s/oa4LVZTkchNG93IB2V6QSA",
+    "label": "阅读第 4 期周报"
   },
   "issues": [
+    {
+      "issue": 4,
+      "date": "2026-09-02",
+      "wechatUrl": "https://mp.weixin.qq.com/s/oa4LVZTkchNG93IB2V6QSA",
+      "summary": "本期从 PubPeer 公开评论中精选 10 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 10 个学科"
+    },
     {
       "issue": 3,
       "date": "2026-08-26",
@@ -28,5 +34,18 @@
       "wechatUrl": "https://mp.weixin.qq.com/s/M4Etb-bBYYjP5tREsR8Siw",
       "summary": "本期从 PubPeer 公开评论中精选 20 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 17 个学科"
     }
-  ]
+  ],
+  "ai4s": {
+    "github": "https://github.com/piwir/PubAI4S",
+    "posts": [
+      {
+        "no": 1,
+        "repo": "omicverse/omicverse",
+        "name": "OmicVerse",
+        "date": "2026-09-04",
+        "summary": "OmicVerse · 把整个转录组宇宙装进一个 Python 框架",
+        "url": ""
+      }
+    ]
+  }
 }

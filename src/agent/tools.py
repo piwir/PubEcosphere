@@ -215,6 +215,41 @@ def _run_issue(args: dict) -> CmdSpec:
     return CmdSpec(["bash", "run_issue.sh"], env=env)
 
 
+# ---- pubai4s（子模块推文流水线）--------------------------------------------
+# 写稿默认由 subagent 本体按 submodules/PubAI4S/docs/prompts/ 提示词完成（见
+# src/agent/*.md）；这三个工具只覆盖确定性步骤与「走 API」全流程模式。
+
+def _pubai4s_out_dir(args: dict) -> list[str]:
+    if args.get("out_dir"):
+        return ["--out-dir", str(_output_path(args["out_dir"]))]
+    return []  # 默认：父仓库 output/PubAI4S（pubai4s 自动推导）
+
+
+def _pubai4s_fetch(args: dict) -> CmdSpec:
+    argv = [PY, "-m", "pubai4s", "fetch", str(args["repo_url"])]
+    if args.get("no_codegraph"):
+        argv.append("--no-codegraph")
+    argv += _pubai4s_out_dir(args)
+    return CmdSpec(argv)
+
+
+def _pubai4s_render(args: dict) -> CmdSpec:
+    d = _output_path(args["out_dir"])
+    return CmdSpec([PY, "-m", "pubai4s", "render", str(d)])
+
+
+def _pubai4s_run(args: dict) -> CmdSpec:
+    argv = [PY, "-m", "pubai4s", "run", str(args["repo_url"])]
+    if args.get("no_codegraph"):
+        argv.append("--no-codegraph")
+    if args.get("model"):
+        argv += ["--model", str(args["model"])]
+    if args.get("dry_run"):
+        argv.append("--dry-run")
+    argv += _pubai4s_out_dir(args)
+    return CmdSpec(argv)
+
+
 # ---- 工具注册 ------------------------------------------------------------
 
 def _schema(props: dict, required: list[str] | None = None) -> dict:
@@ -343,6 +378,37 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
                  "dry_run": {"type": "boolean", "description": "只预览 pick 不下载"}},
                 required=["issue"]),
         _run_issue),
+    ToolDef(
+        "pubai4s_fetch",
+        "AI4S 推文流水线·抓取：仓库元数据 + README + 官网爬取（链接索引/页面摘要/教程配图）"
+        "+ codegraph 代码结构 + 图片下载，写 output/PubAI4S/<owner>-<repo>/inputs/。不调 LLM。"
+        "codegraph 慢时可 no_codegraph=true（复用已有 inputs/codegraph.txt 需自行备份/还原）。",
+        _schema({"repo_url": {"type": "string",
+                              "description": "https://github.com/o/r、git@github.com:o/r.git 或 o/r"},
+                 "no_codegraph": {"type": "boolean",
+                                  "description": "跳过 codegraph（大仓库慢/复用已有摘要时）"},
+                 "out_dir": {"type": "string",
+                             "description": "output/ 内相对目录（默认 output/PubAI4S 自动推导）"}}),
+        _pubai4s_fetch),
+    ToolDef(
+        "pubai4s_render",
+        "AI4S 推文流水线·渲染：<dir>/post.md → post.html + post-base64.html（微信粘贴用）。"
+        "post.md 通常由 subagent 按 prompt_writer.md 撰写后传入。",
+        _schema({"out_dir": {"type": "string",
+                             "description": "output/ 内相对目录（含 post.md）"}},
+                required=["out_dir"]),
+        _pubai4s_render),
+    ToolDef(
+        "pubai4s_run",
+        "AI4S 推文全流程（走 .env 模型）：fetch → 提取材料 → 写稿 → 渲染。"
+        "默认写稿模式是 subagent 本体按 docs 提示词写（见 src/agent/pubai4s-post.md），本工具供无头/定时场景。"
+        "dry_run=true 只抓取预览不调 LLM。⚠ 产物需人工审核后再发布。",
+        _schema({"repo_url": {"type": "string", "description": "仓库地址（同 pubai4s_fetch）"},
+                 "no_codegraph": {"type": "boolean", "description": "跳过 codegraph"},
+                 "model": {"type": "string", "description": "覆盖 .env 默认模型"},
+                 "dry_run": {"type": "boolean", "description": "只抓取预览，不调 LLM"},
+                 "out_dir": {"type": "string", "description": "output/ 内相对目录（默认自动推导）"}}),
+        _pubai4s_run),
 ]}
 
 

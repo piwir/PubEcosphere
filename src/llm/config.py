@@ -13,11 +13,13 @@ import os
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-PROMPT_DIR_DEFAULT = Path(__file__).resolve().parent.parent / "docs" / "prompts"
+from repopath import REPO_ROOT
 
-# 仓库根（llm/ 的父目录）下的 .env；gitignored，不随代码提交。
-ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
+PROMPT_DIR_DEFAULT = REPO_ROOT / "docs" / "prompts"
+
+# 仓库根下的 .env；gitignored，不随代码提交。
+ENV_FILE = REPO_ROOT / ".env"
 
 # 单模型路径（extract_text + writer 用同一模型）
 ENV_MODEL = "PUBECOSPHERE_LLM_MODEL"

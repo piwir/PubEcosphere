@@ -1,6 +1,6 @@
 """md → 微信兼容 HTML 转换（仓库内 vendor，无外部 skill 依赖）。
 
-转换器为仓库内 vendored（`vendor/md2html/` 包 + `vendor/md2html-cli/scripts/render.ts` 薄 CLI，
+转换器为仓库内 vendored（`src/vendor/md2html/` 包 + `src/vendor/md2html-cli/scripts/render.ts` 薄 CLI，
 经裁剪：去掉 mermaid，手调 CSS 随 vendor 双份带入库），不依赖任何外部 skill；
 手调 CSS 是仓库资产，换机/重装不丢。
 
@@ -21,9 +21,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-RENDER_TS = REPO_ROOT / "vendor" / "md2html-cli" / "scripts" / "render.ts"
-NODE_MODULES = REPO_ROOT / "vendor" / "md2html-cli" / "node_modules"
+from repopath import REPO_ROOT
+
+RENDER_TS = REPO_ROOT / "src" / "vendor" / "md2html-cli" / "scripts" / "render.ts"
+NODE_MODULES = REPO_ROOT / "src" / "vendor" / "md2html-cli" / "node_modules"
 
 
 def resolve_bun() -> list[str]:
@@ -40,7 +41,7 @@ def resolve_main() -> Path:
     target = Path(override) if override else RENDER_TS
     if not target.exists():
         raise FileNotFoundError(
-            f"未找到转换器入口：{target}。仓库内请先 `cd vendor/md2html-cli && npx -y bun install`")
+            f"未找到转换器入口：{target}。仓库内请先 `cd src/vendor/md2html-cli && npx -y bun install`")
     return target
 
 
@@ -62,7 +63,7 @@ def check_ready() -> tuple[bool, list[str]]:
         problems.append(f"缺少转换器脚本 {RENDER_TS}")
     if not (NODE_MODULES / "md2html").exists():
         problems.append(
-            f"缺少依赖（node_modules）。请 `cd vendor/md2html-cli && npx -y bun install`")
+            f"缺少依赖（node_modules）。请 `cd src/vendor/md2html-cli && npx -y bun install`")
     return (not problems, problems)
 
 

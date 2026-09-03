@@ -25,8 +25,6 @@ from .generate import generate_issue, issue_header, material_papers, weekly_date
 from .polish_html import polish_html, repair_github_links, style_footer_links
 from .prompts import validate_prompt_schema
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
 
 def _make_png(width: int = 12, height: int = 8, color: tuple = (255, 0, 0)) -> bytes:
     """内存里合成一张极小 PNG（自测用，不依赖真实素材目录）。"""

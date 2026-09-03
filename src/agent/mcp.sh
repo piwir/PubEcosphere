@@ -3,13 +3,13 @@
 # 这里先切到仓库根、再解析一个可用的 python，保证 `python -m agent.mcp_server` 能跑起来。
 #
 # 挂载：任何 MCP 客户端在 MCP 配置里添加（绝对路径——健康检查 cwd 是 /，相对路径会失效）：
-#   { "mcpServers": { "pubecosphere": { "command": "bash", "args": ["/abs/path/to/PubEcosphere/agent/mcp.sh"] } } }
+#   { "mcpServers": { "pubecosphere": { "command": "bash", "args": ["/abs/path/to/PubEcosphere/src/agent/mcp.sh"] } } }
 #
 # 换机器/换 python：设 PYTHON 环境变量，或把 conda 加进 PATH（例如 conda activate）。
 set -euo pipefail
 
-# 1) 切到仓库根（本文件在仓库根/agent 下）
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 1) 切到仓库根（本文件在仓库根/src/agent 下）
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 # 2) 解析 python：PYTHON 覆盖 → PATH 上的 python → python3 → 常见 conda 路径

@@ -14,8 +14,8 @@ Server 是**无状态薄层**：智能在确定性 CLI + 机器可读状态（`s
 ## 安装 / 挂载
 
 ```bash
-pip install -r requirements.txt                      # 仓库根（Pillow）
-cd vendor/md2html-cli && npx -y bun install          # md→html 转换器依赖（首次联网）
+pip install -e .                                     # 仓库根（src 布局，Pillow）
+cd src/vendor/md2html-cli && npx -y bun install      # md→html 转换器依赖（首次联网）
 cp .env.example .env                                 # 填 PUBECOSPHERE_LLM_API_KEY（仅 generate 需要）
 
 # 任何 MCP 客户端（pi agent 等）：在 MCP 配置里添加（必须绝对路径启动脚本，见下）
@@ -23,15 +23,15 @@ cp .env.example .env                                 # 填 PUBECOSPHERE_LLM_API_
   "mcpServers": {
     "pubecosphere": {
       "command": "bash",
-      "args": ["/abs/path/to/PubEcosphere/agent/mcp.sh"]
+      "args": ["/abs/path/to/PubEcosphere/src/agent/mcp.sh"]
     }
   }
 }
 ```
 
-server 自推导仓库根（`agent/runner.py`），无需指定 cwd。
+server 自推导仓库根（`src/agent/runner.py`），无需指定 cwd。
 
-> **启动环境坑**：MCP 客户端健康检查/启动 server 时 cwd 常是 `/`、PATH 不含 conda，直接 `python -m agent.mcp_server` 会 `ModuleNotFoundError` / `python: not found`。`agent/mcp.sh` 负责两件事：切到仓库根 + 解析可用 python（依次找 `$PYTHON` 环境变量 → `python` → `python3` → 常见 conda 路径）。换机器找不到 python 时，在配置里加 `"env": {"PYTHON": "/path/to/python"}`。
+> **启动环境坑**：MCP 客户端健康检查/启动 server 时 cwd 常是 `/`、PATH 不含 conda，直接 `python -m agent.mcp_server` 会 `ModuleNotFoundError` / `python: not found`。`src/agent/mcp.sh` 负责两件事：切到仓库根 + 解析可用 python（依次找 `$PYTHON` 环境变量 → `python` → `python3` → 常见 conda 路径）。换机器找不到 python 时，在配置里加 `"env": {"PYTHON": "/path/to/python"}`。
 
 ## 自检
 
@@ -74,11 +74,11 @@ python -m agent.mcp_server --list-tools
 ## 架构
 
 ```
-agent/
+src/agent/
 ├── mcp_server.py    # stdio MCP 协议（JSON-RPC 2.0 子集：initialize/ping/tools/list/tools/call）
 ├── runner.py        # run_cli：list-arg subprocess，repo_root 自推导
 ├── tools.py         # 13 工具：参数校验 → 命令构造 → 执行
 └── __main__.py      # python -m agent 委托
 ```
 
-纯 stdlib，无额外 Python 依赖（requirements.txt 只有 Pillow，供流水线 image 合并用，非 server 必需）。
+纯 stdlib，无额外 Python 依赖（pyproject.toml 依赖只有 Pillow，供流水线 image 合并用，非 server 必需）。

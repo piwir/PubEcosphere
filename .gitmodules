@@ -1,0 +1,3 @@
+[submodule "submodules/PubAI4S"]
+	path = submodules/PubAI4S
+	url = https://github.com/piwir/PubAI4S.git

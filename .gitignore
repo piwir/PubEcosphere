@@ -4,7 +4,7 @@ Thumbs.db
 Desktop.ini
 
 # site
-site/dist/
+src/site/dist/
 
 # Others
 __pycache__/
@@ -21,6 +21,7 @@ node_modules/
 *.env
 .env*
 !.env.example
+.q*/
 
 # output
 *.log

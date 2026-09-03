@@ -1,6 +1,6 @@
 """`python -m agent` 入口：委托给 mcp_server.main（默认 stdio 服务，或 --selftest / --list-tools）。
 
-挂载：在 MCP 客户端配置中添加 `bash <repo>/agent/mcp.sh`（见 agent/README.md）。
+挂载：在 MCP 客户端配置中添加 `bash <repo>/src/agent/mcp.sh`（见 src/agent/README.md）。
 自测：python -m agent.mcp_server --selftest
 """
 from __future__ import annotations

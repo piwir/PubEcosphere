@@ -3,7 +3,7 @@
 无第三方依赖：
 - 请求体按 OpenAI 消息格式构造（纯文本消息）。
 - `transport` 可注入（默认走 urllib），离线自测用假 transport 验 POST body 即可。
-- 5xx / 429 退避重试，参照 crawler/client.py 的 RETRYABLE 先例。
+- 5xx / 429 退避重试，参照 src/crawler/client.py 的 RETRYABLE 先例。
 未来若想换 openai SDK，只改本文件。
 """
 from __future__ import annotations

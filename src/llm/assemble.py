@@ -13,6 +13,8 @@ import re
 import shutil
 from pathlib import Path
 
+from repopath import REPO_ROOT
+
 IMAGE_REF_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 PID_TAG_RE = re.compile(r"PID:([0-9A-Fa-f]{6,})")
 KINDS = ("first_merged", "author_merged", "sleuth_merged")
@@ -27,7 +29,7 @@ SLEUTH_KEYS = (
 # 固定简介图：由写稿提示词作为固定块输出引用（intro.png），这里只把 images/intro.png 复制到
 # 与 md 同目录，供 md2html/inline_images 解析；文案以写稿提示词为唯一来源，不经排版阶段。
 INTRO_IMG = "intro.png"          # 复制到 weekly 目录后的裸文件名
-INTRO_SRC = Path(__file__).resolve().parent.parent / "images" / "intro.png"
+INTRO_SRC = REPO_ROOT / "images" / "intro.png"
 
 
 def _norm(s: str) -> str:

@@ -15,8 +15,8 @@
 #   DRY_RUN        1 = pick 只预览不下载，看完即停（默认 0 全流程）
 #   WEEK_START     第 1 期数据收集起始日 YYYY-MM-DD（默认 2026-08-03；单一锚点：
 #                  正整数期号的打分窗口 = [WEEK_START+(期号-1)*7, +7 天)，与导语标签同算法）
-#   BUN            bun 运行时覆盖（默认经 npx -y bun 启动，见 llm/md2html.py resolve_bun）
-#   MD2HTML_MAIN   转换器入口覆盖（默认仓库 vendor/md2html-cli/scripts/render.ts）
+#   BUN            bun 运行时覆盖（默认经 npx -y bun 启动，见 src/llm/md2html.py resolve_bun）
+#   MD2HTML_MAIN   转换器入口覆盖（默认仓库 src/vendor/md2html-cli/scripts/render.ts）
 #
 # 用法：ISSUE=1 ./run_issue.sh    或   DRY_RUN=1 ISSUE=1 ./run_issue.sh
 set -euo pipefail
@@ -99,7 +99,7 @@ python -m llm generate --material-dir "$OUT_ROOT/pub" --weekly-dir "$WEEKLY" \
     --issue "$ISSUE" --assemble
 
 # 6) md → 微信兼容 HTML（--keep-title 保留主标题 `# PubPeer 周报 · issue N`）
-#    转换器为仓库内 vendor（vendor/md2html-cli），bun 默认经 npx -y bun 启动，
+#    转换器为仓库内 vendor（src/vendor/md2html-cli），bun 默认经 npx -y bun 启动，
 #    不依赖任何外部 skill。
 echo "==> [7/8] md2html md → html"
 python -m llm md2html "$WEEKLY/$ISSUE.md" --theme default --keep-title

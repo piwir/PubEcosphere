@@ -1,12 +1,13 @@
-"""CLI：python -m pubai4s run|fetch|render|check <args>。
+"""CLI：python -m pubai4s run|fetch|archmap|render|check <args>。
 
 依赖父仓库 PubEcosphere 的 llm.*（可编辑安装）；缺父仓库时干净退出 1。
 
 子命令：
-  run    <repo_url>  全流程：抓取 → 提取材料 → 写稿 → 渲染（调 LLM）
-  fetch  <repo_url>  只抓取仓库/官网并下载图片（不调 LLM，供人工/subagent 中间处理）
-  render <out_dir>   把 <out_dir>/post.md 渲染成 html + base64 html
-  check              校验提示词八节齐全
+  run     <repo_url>  全流程：抓取 → 提取材料 → 写稿 → 渲染（调 LLM）
+  fetch   <repo_url>  只抓取仓库/官网并下载图片（不调 LLM，供人工/subagent 中间处理）
+  archmap <out_dir>   从 <out_dir>/inputs/codegraph.txt 生成 arch.png 架构思维导图
+  render  <out_dir>   把 <out_dir>/post.md 渲染成 html + base64 html
+  check               校验提示词八节齐全
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ except ImportError:
           file=sys.stderr)
     raise SystemExit(1)
 
+from .archmap import ARCH_FILENAME, generate_arch_png, prepend_arch_manifest
 from .extract import (README_LIMIT, SUMMARY_LIMIT, ExtractionError,
                       append_image_manifest, extract_material, fetch_stage)
 from .generate import PostGenerationError, generate_post
@@ -165,6 +167,31 @@ def cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_archmap(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir)
+    cg = out_dir / "inputs" / "codegraph.txt"
+    if not cg.exists():
+        print(f"错误：{cg} 不存在（无 codegraph 摘要，无法生成架构图）", file=sys.stderr)
+        return 1
+    project = out_dir.name
+    meta = out_dir / "inputs" / "meta.txt"
+    if meta.exists():
+        first = meta.read_text(encoding="utf-8").splitlines()[0]
+        if first.startswith("名称："):
+            project = first[len("名称："):].strip()
+    target = Path(args.out) if args.out else out_dir / ARCH_FILENAME
+    try:
+        result = generate_arch_png(cg.read_text(encoding="utf-8"), target, project)
+    except Exception as exc:
+        print(f"错误：架构图生成失败（{exc}）", file=sys.stderr)
+        return 1
+    if result is None:
+        return 1
+    if not args.out:
+        prepend_arch_manifest(out_dir / "images.md")
+    return 0
+
+
 def cmd_check(_args: argparse.Namespace) -> int:
     problems = validate_prompts()
     if problems:
@@ -201,6 +228,13 @@ def main(argv: list[str] | None = None) -> int:
     p_render = sub.add_parser("render", help="把 <dir>/post.md 渲染成 html + base64 html")
     p_render.add_argument("out_dir")
     p_render.set_defaults(func=cmd_render)
+
+    p_arch = sub.add_parser("archmap",
+                            help="从 <out_dir>/inputs/codegraph.txt 生成 arch.png 架构思维导图")
+    p_arch.add_argument("out_dir")
+    p_arch.add_argument("--out", default=None,
+                        help="覆盖输出 PNG 路径（默认 <out_dir>/arch.png，并同步 images.md 清单首位）")
+    p_arch.set_defaults(func=cmd_archmap)
 
     sub.add_parser("check", help="校验提示词八节齐全").set_defaults(func=cmd_check)
 

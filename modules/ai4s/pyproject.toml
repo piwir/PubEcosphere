@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "AI4S 项目推文生成"
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = ["Pillow>=10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

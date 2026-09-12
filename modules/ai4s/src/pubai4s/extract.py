@@ -16,6 +16,7 @@ from pathlib import Path
 from llm.client import LLMClient, LLMError
 from llm.config import LLMConfig
 
+from .archmap import ARCH_ALT, ARCH_FILENAME, generate_arch_png
 from .codegraph import SUMMARY_LIMIT, generate_codegraph_summary
 from .github import MAX_IMAGES, GitHubClient, RepoInfo
 from .prompts import load_prompt
@@ -25,6 +26,8 @@ README_LIMIT = 35000    # README 字符截断（喂给 LLM / 落盘 inputs）
 BADGE_RE = ("shields.io", "/badge/", "badgen.net", "img.shields")  # 徽章跳过
 # 动态生成/SVG 类"图片"下载后无法当位图内联（渲染失败），与徽章一并跳过
 JUNK_IMG_SUFFIX_HOSTS = (".svg", "api.star-history.com", "contrib.rocks")
+# URL 末段文件名含这些词的基本是图标/头像/赞助图，无推文价值
+JUNK_NAME_RE = re.compile(r"(logo|icon|avatar|favicon|sprite|sponsor)", re.I)
 # 每个爬取页最多贡献 2 张图片进候选（教程页示意图重要，但不让单页霸占配额）
 PAGE_IMAGE_CAP = 2
 
@@ -57,9 +60,21 @@ def _is_badge(url: str) -> bool:
 
 
 def _is_junk_image(url: str) -> bool:
-    low = url.lower().split("#", 1)[0]
-    return _is_badge(url) or low.endswith(JUNK_IMG_SUFFIX_HOSTS) or any(
-        h in low for h in JUNK_IMG_SUFFIX_HOSTS)
+    low = url.lower().split("#", 1)[0].split("?", 1)[0]
+    if _is_badge(url) or low.endswith(JUNK_IMG_SUFFIX_HOSTS) or any(
+            h in low for h in JUNK_IMG_SUFFIX_HOSTS):
+        return True
+    return bool(JUNK_NAME_RE.search(low.rsplit("/", 1)[-1]))
+
+
+def _too_small(path: Path, min_edge: int = 100) -> bool:
+    """按真实像素过滤图标类小图（HTML width 属性过滤的兜底）；打不开也视为垃圾。"""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            return max(im.size) < min_edge
+    except Exception:
+        return True
 
 
 def _clean_readme(text: str) -> str:
@@ -94,6 +109,14 @@ def fetch_stage(client: GitHubClient, owner: str, name: str, out_dir: Path,
             print(f"警告（codegraph）：{w}")
 
     images = _download_images(client, info, readme, home.og_image if home else "", crawl, out_dir)
+
+    # 架构图是增强产物：不占 MAX_IMAGES 配额、不参与 img-N 编号，失败不阻塞抓取
+    if codegraph_text:
+        try:
+            if generate_arch_png(codegraph_text, out_dir / ARCH_FILENAME, info.name) is not None:
+                images.insert(0, ImageItem(filename=ARCH_FILENAME, alt=ARCH_ALT))
+        except Exception as exc:
+            print(f"警告（archmap）：架构图生成失败，跳过（{exc}）")
 
     inputs = out_dir / "inputs"
     inputs.mkdir(parents=True, exist_ok=True)
@@ -145,8 +168,12 @@ def _download_images(client: GitHubClient, info: RepoInfo, readme: str,
     def _add(url: str, alt: str, filename: str) -> bool:
         if len(images) >= MAX_IMAGES or url in seen or _is_junk_image(url):
             return False
-        if client.download(url, out_dir / filename):
+        dest = out_dir / filename
+        if client.download(url, dest):
             seen.add(url)
+            if _too_small(dest):
+                dest.unlink(missing_ok=True)
+                return False
             images.append(ImageItem(filename=filename, alt=alt))
             return True
         return False

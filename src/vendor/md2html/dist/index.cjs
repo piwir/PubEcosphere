@@ -72548,6 +72548,7 @@ function preprocessCjkEmphasis(markdown2) {
   const stringify = unified().use(remarkStringify);
   let result = stringify.stringify(tree);
   result = result.replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+  result = result.replace(/\\([_*[\]])/g, "$1");
   return result;
 }
 function renderMarkdown(raw, renderer) {

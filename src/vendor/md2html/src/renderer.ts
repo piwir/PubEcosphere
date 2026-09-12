@@ -387,6 +387,10 @@ function preprocessCjkEmphasis(markdown: string): string {
   result = result.replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) =>
     String.fromCodePoint(parseInt(hex, 16))
   );
+  // remark-stringify 会把正文中的 `_`、`*`、`[` 转义成 \_ 等；marked 的 gfm autolink
+  // URL token 不解反转义，URL 会残留反斜杠（href 变 %5C）。强调节点已在 visit 步骤
+  // 固化为 <strong>/<em>，此处还原三类转义；行内代码内容不经 stringify 转义，不受影响。
+  result = result.replace(/\\([_*[\]])/g, "$1");
   return result;
 }
 

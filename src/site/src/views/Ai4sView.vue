@@ -11,9 +11,9 @@ const pad = (n) => String(n).padStart(2, '0')
       <p class="eyebrow">AI4S</p>
       <h1 class="page-title">AI4S 项目推文</h1>
       <p class="page-sub">
-        把 GitHub 上的 AI for Science 项目写成可发布的介绍长文 · 由
+        介绍AI4S项目 · 由
         <a :href="site.ai4s.github" target="_blank" rel="noopener">PubAI4S</a>
-        流水线生成
+        生成
       </p>
 
       <div class="issue-row" v-for="it in posts" :key="it.repo">

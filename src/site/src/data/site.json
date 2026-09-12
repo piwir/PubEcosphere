@@ -2,37 +2,43 @@
   "siteName": "PubEcosphere",
   "tagline": "PubPeer 学术诚信周报 · 每周三更新",
   "github": "https://github.com/piwir/PubEcosphere",
-  "currentIssue": 4,
-  "issueDate": "2026-09-02",
-  "window": "2026-08-24 – 2026-08-30",
+  "currentIssue": 5,
+  "issueDate": "2026-09-09",
+  "window": "2026-08-31 – 2026-09-06",
   "wechat": {
-    "url": "https://mp.weixin.qq.com/s/oa4LVZTkchNG93IB2V6QSA",
-    "label": "阅读第 4 期周报"
+    "url": "https://mp.weixin.qq.com/s/RQxImxzCO8n2Pm9XtmSUKg",
+    "label": "阅读第 5 期周报"
   },
   "issues": [
+    {
+      "issue": 5,
+      "date": "2026-09-09",
+      "wechatUrl": "https://mp.weixin.qq.com/s/RQxImxzCO8n2Pm9XtmSUKg",
+      "summary": "PubPeer 周报 · issue 5"
+    },
     {
       "issue": 4,
       "date": "2026-09-02",
       "wechatUrl": "https://mp.weixin.qq.com/s/oa4LVZTkchNG93IB2V6QSA",
-      "summary": "本期从 PubPeer 公开评论中精选 10 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 10 个学科"
+      "summary": "PubPeer 周报 · issue 4"
     },
     {
       "issue": 3,
       "date": "2026-08-26",
       "wechatUrl": "https://mp.weixin.qq.com/s/x1sfWGiBFJpvjPMnXbynWw",
-      "summary": "本期从 PubPeer 公开评论中精选 10 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 7 个学科"
+      "summary": "PubPeer 周报 · issue 3"
     },
     {
       "issue": 2,
       "date": "2026-08-19",
       "wechatUrl": "https://mp.weixin.qq.com/s/Xb9fKV1_-aU0xStSG77PRQ",
-      "summary": "本期从 PubPeer 公开评论中精选 30 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 15 个学科"
+      "summary": "PubPeer 周报 · issue 2"
     },
     {
       "issue": 1,
       "date": "2026-08-12",
       "wechatUrl": "https://mp.weixin.qq.com/s/M4Etb-bBYYjP5tREsR8Siw",
-      "summary": "本期从 PubPeer 公开评论中精选 20 篇围绕原始数据、图表与方法展开激烈讨论的论文，覆盖 17 个学科"
+      "summary": "PubPeer 周报 · issue 1"
     }
   ],
   "ai4s": {
@@ -42,9 +48,9 @@
         "no": 1,
         "repo": "omicverse/omicverse",
         "name": "OmicVerse",
-        "date": "2026-09-04",
+        "date": "2026-09-11",
         "summary": "OmicVerse · 把整个转录组宇宙装进一个 Python 框架",
-        "url": ""
+        "url": "https://mp.weixin.qq.com/s/GO5QCuqZH-a2Mj-t4nulOQ"
       }
     ]
   }

@@ -9,7 +9,7 @@ import html
 import re
 from pathlib import Path
 
-from .cas import issn_key, name_key
+from .cas import fuzzy_name_match, issn_key, name_key
 
 
 def _find_if_col(headers: list[str]) -> str | None:
@@ -67,7 +67,8 @@ class JcrIndex:
             nk = name_key(journal)
             if nk in self._by_name:
                 return self._by_name[nk]
-            for k, v in self._by_name.items():
-                if nk and (nk in k or k in nk):
-                    return v
+            # 兑底模糊匹配：见 cas.fuzzy_name_match（长度比阈值 + 最长 key，防短刊名撞车）
+            _, v = fuzzy_name_match(nk, self._by_name)
+            if v is not None:
+                return v
         return None

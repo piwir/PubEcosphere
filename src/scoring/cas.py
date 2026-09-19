@@ -92,6 +92,37 @@ class Classification:
     method: str = ""            # issn | name | name_contains
 
 
+# 名称兑底匹配的相似度下限：互为子串时，短串至少占长串 70%。
+# 防的是一字/一词的通用刊名撞进任意长刊名：
+#   'science' ⊂ 'European review for medical and pharmacological sciences'（0.14）
+#   'chem'    ⊂ 'Chemosphere'（0.40）→ 错给 Chemosphere 标 Chem 的 IF
+# 合法的“前后缀差异”仍能命中（长度比 ≥ 阈值）：
+#   CAS 'Science of The Total Environment' vs PubPeer 'The Science of The Total Environment'（0.89）
+_MIN_NAME_CONTAINS_RATIO = 0.7
+
+
+def fuzzy_name_match(key: str, table: dict):
+    """精确匹配失败后的兑底：互为子串且长度比达阈值的候选中取 key 最长者。
+
+    返回 (匹配到的 key, 值)；无合格候选时返回 (None, None)。
+    调用方负责写 method（JCR 只取值，CAS 另行标 name_contains）。
+    """
+    if not key:
+        return None, None
+    best_key = None
+    best_val = None
+    for k, v in table.items():
+        if not k:
+            continue
+        if k in key or key in k:
+            short, long_ = sorted((len(k), len(key)))
+            if not long_ or short / long_ < _MIN_NAME_CONTAINS_RATIO:
+                continue
+            if best_key is None or len(k) > len(best_key):
+                best_key, best_val = k, v
+    return best_key, best_val
+
+
 class CasIndex:
     """分类索引：ISSN 键 + 期刊名键 -> Classification。"""
 
@@ -204,9 +235,9 @@ class CasIndex:
             k = name_key(journal)
             if k in self._by_name:
                 return replace(self._by_name[k], method="name")
-            for nk, c in self._by_name.items():
-                if k and (k in nk or nk in k):
-                    return replace(c, method="name_contains")
+            _, hit = fuzzy_name_match(k, self._by_name)
+            if hit is not None:
+                return replace(hit, method="name_contains")
         return Classification()
 
     # ---- 覆盖率 -----------------------------------------------------------

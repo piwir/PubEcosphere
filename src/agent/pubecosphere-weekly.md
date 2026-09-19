@@ -17,7 +17,8 @@
    - 阶段B：读 `docs/prompts/prompt_weekly_writer.md` 全文作为唯一骨架依据，把全部材料写成 `output/issue/<N>/weekly/<N>.md` 一期完整草稿。导语日期标签（素材收集 FROM–TO）按 `src/llm/generate.py:weekly_date_range` 的 `WEEK_START_BASE+(期号-1)*7` 算法推算；卡片字段顺序、页脚两行 blockquote 纯文字 URL、固定简介块等格式约定全部照提示词执行；
    - 篇幅大时分批写作：先固定简介块 + 主标题 + 导语，再逐分类章节追加，最后问题概览与结语，全部写完后按提示词自检清单核对再定稿。
 6. **排版渲染**：`python -m llm assemble --material-dir output/issue/<N>/pub --weekly-dir output/issue/<N>/weekly --issue <N>` → `python -m llm md2html output/issue/<N>/weekly/<N>.md` → `python -m llm polish_html output/issue/<N>/weekly/<N>.html` → `python -m llm.inline_images output/issue/<N>/weekly/<N>.html`（产出 `N-base64.html`）。
-7. **人工门槛 2**：报告 `output/issue/<N>/weekly/` 下草稿与成品路径，等用户审核；不要自行推送或发布。审核意见按提示词格式修订后重跑第 6 步。
+7. **官网归档**：`python -m sitejson sync --issue <N>`（MCP 为 `site_sync`）把本期期号/日期/素材窗口/归档条目写进 `src/site/src/data/site.json`——幂等、只动周报相关字段（`ai4s` 不碰）、不 commit 不 push；公众号链接发布后由用户在 `issues[].wechatUrl` 补上再重跑一次（首页 CTA 由它派生）。
+8. **人工门槛 2**：报告 `output/issue/<N>/weekly/` 下草稿与成品路径 + site.json 归档结果，等用户审核；不要自行推送或发布。审核意见按提示词格式修订后重跑第 6 步。
 
 ## 替代模式
 
@@ -28,4 +29,5 @@
 - 密钥只存在于环境变量 / 仓库根 `.env`：绝不打印、不进日志、不写进任何文件。
 - rank 默认排除已发布（published 表）；单期入选总数上限 10、覆盖 ≥7 门类、min_score 0.50、打分权重——均已由用户拍板，不得擅自修改。
 - 草稿在用户审核通过前不外发；任何对分数权重、阈值、提示词格式的调整必须先征得用户同意。
+- `site.json` 随仓库公开：归档只写期号/日期/窗口/固定中性摘要，不放周报正文、pubpeer id、打假人姓名；公众号链接由用户提供，不要自造。
 - 命令退出码非 0 时如实报告，不掩盖、不跳过。

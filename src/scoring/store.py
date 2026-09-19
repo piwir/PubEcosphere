@@ -80,7 +80,10 @@ class ScoringStore:
     def __init__(self, path: str | Path):
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        # timeout/busy_timeout：默认 5s 太短，与 capture/rank/pick/DB 拷贝并发时容易撞
+        # 「database is locked」直接抛出去（本地 cron 里表现为 enrich 天天失败）。
+        self.conn = sqlite3.connect(self.path, timeout=30.0)
+        self.conn.execute("PRAGMA busy_timeout=30000")
         self.conn.executescript(SCHEMA)
         self._migrate()
 

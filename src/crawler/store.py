@@ -63,7 +63,9 @@ class Store:
     def __init__(self, path: str | Path):
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        # 同 scoring.store：给足 30s 锁等待，避免与 enrich/rank/DB 拷贝并发时直接报错
+        self.conn = sqlite3.connect(self.path, timeout=30.0)
+        self.conn.execute("PRAGMA busy_timeout=30000")
         self.conn.executescript(SCHEMA)
 
     @contextmanager

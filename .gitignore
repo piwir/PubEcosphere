@@ -21,7 +21,6 @@ node_modules/
 *.env
 .env*
 !.env.example
-.q*/
 
 # output
 *.log
@@ -31,7 +30,7 @@ data/pubpeer.db.bak-*
 *.db-shm
 output/
 
-# docs（仅 docs/prompts/ 下提示词随仓库提交）
+# docs
 docs/*
 AGENTS.md
 !docs/prompts/

@@ -74,7 +74,7 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 ## Agent 集成
 
-同一套 CLI 与写稿提示词，两种挂载形态：**MCP server**（16 个确定性工具，供定时/无头客户端）与 **subagent 系统提示词**（交互式 agent，全流程编排 + 写稿一体）。确定性步骤走 CLI/MCP 工具，写稿默认由 subagent 本体按 `docs/prompts/` 提示词完成，「走 API」时用 `generate` / `pubai4s_run`。
+同一套 CLI 与写稿提示词，两种挂载形态：**MCP server**（17 个确定性工具，供定时/无头客户端）与 **subagent 系统提示词**（交互式 agent，全流程编排 + 写稿一体）。确定性步骤走 CLI/MCP 工具，写稿默认由 subagent 本体按 `docs/prompts/` 提示词完成，「走 API」时用 `generate` / `pubai4s_run`。
 
 **前提**：`pip install -e .`；推文流水线另需 `pip install -e submodules/PubAI4S`；`cd src/vendor/md2html-cli && npx -y bun install`（首次联网拉传递依赖一次）；`.env` 配 `PUBECOSPHERE_LLM_API_KEY`（仅「走 API」模式需要）。
 
@@ -102,11 +102,11 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 https://piwir.github.io/PubEcosphere/ （Vue 3 + Vite，GitHub Actions 自动部署）：展示**当前期号**与公众号入口，另有往期归档与项目介绍。
 
-站点数据由单文件 `src/site/src/data/site.json` 手动维护。**每期发布后**编辑该文件并 push，Actions 自动重新部署：
+站点数据由单文件 `src/site/src/data/site.json` 维护：**每期生成结束时自动归档**（`python -m sitejson sync --issue N`，写 `currentIssue` / `issueDate` / `window` + `issues[]` 归档条目，公众号链接除外）。**发布后**只需在 `issues[]` 里补上公众号链接并重跑同一条命令（首页 CTA 由它派生），再 push，Actions 自动重新部署：
 
-1. `currentIssue` / `issueDate` / `window` → 新一期；
-2. `wechat.url` / `wechat.label` → 新一期公众号文章链接；
-3. `issues` 数组头部加一条 `{ "issue": N, "date": "YYYY-MM-DD", "wechatUrl": "…", "summary": "一句话摘要" }`。
+1. `currentIssue` / `issueDate` / `window` → 新一期（自动写入）；
+2. `issues` 数组头部加一条 `{ "issue": N, "date": "YYYY-MM-DD", "wechatUrl": "…", "summary": "一句话摘要" }`（自动写入，`wechatUrl` 留空）；
+3. 发布后在 `issues[]` 条目里补 `wechatUrl` → `python -m sitejson sync --issue N` 同步 `wechat.url` / `wechat.label`（链接未发布时首页显示「即将发布」占位）。
 
 本地开发与换图说明见 [site/README.md](src/site/README.md)。
 

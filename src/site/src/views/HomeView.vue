@@ -22,9 +22,10 @@ const no = String(site.currentIssue).padStart(2, '0')
           NO.{{ no }} · <b>{{ site.issueDate }}</b> · 素材窗口 {{ site.window }}
         </p>
 
-        <a class="cta" :href="site.wechat.url" target="_blank" rel="noopener">
+        <a v-if="site.wechat.url" class="cta" :href="site.wechat.url" target="_blank" rel="noopener">
           {{ site.wechat.label }} →
         </a>
+        <span v-else class="cta cta-pending">{{ site.wechat.label }}</span>
 
         <p class="sublinks">
           <a class="sweep-link" :href="site.github" target="_blank" rel="noopener">GitHub</a>

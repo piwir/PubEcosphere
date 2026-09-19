@@ -226,6 +226,15 @@ a { color: var(--ink); }
 
 .cta:hover::before { transform: scaleX(1); }
 
+/* 公众号链接未发布时的占位态：不可点、无荧光笔扫过 */
+.cta-pending {
+  background: var(--line);
+  color: var(--muted);
+  cursor: default;
+}
+
+.cta-pending::before { display: none; }
+
 .sublinks {
   display: flex;
   flex-wrap: wrap;

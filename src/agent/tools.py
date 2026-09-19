@@ -95,11 +95,19 @@ def _capture(args: dict) -> CmdSpec:
 def _revisit(args: dict) -> CmdSpec:
     argv = [PY, "-m", "crawler.crawl", "--db", DB_DEFAULT, "revisit"]
     win = args.get("window")
+    wdates = args.get("window_dates")
+    if win and wdates:
+        raise ValueError("window 与 window_dates 互斥，只能传一个")
     if win:
         parts = str(win).split()
         if len(parts) != 2 or not all(p.lstrip("-").isdigit() for p in parts):
             raise ValueError(f"window 须为 'D1 D2' 两个整数（如 '10 3'）：{win!r}")
         argv += ["--window", parts[0], parts[1]]
+    elif wdates:
+        parts = str(wdates).split()
+        if len(parts) != 2:
+            raise ValueError(f"window_dates 须为 'START END' 两个 ISO 日期：{wdates!r}")
+        argv += ["--window-dates", parts[0], parts[1]]
     if args.get("limit"):
         argv += ["--limit", str(int(args["limit"]))]
     return CmdSpec(argv)
@@ -127,6 +135,8 @@ def _rank(args: dict) -> CmdSpec:
         argv += ["--window-dates", *_window_dates_for_issue(n)]
     # 与 run_issue.sh 一致：默认 captured_at（CLI 本身默认 last_commented，故显式传）
     argv += ["--window-field", str(args.get("window_field") or "captured_at")]
+    if args.get("force_deep"):
+        argv.append("--force-deep")
     if args.get("run_id"):
         argv += ["--run-id", str(args["run_id"])]
     return CmdSpec(argv)
@@ -215,6 +225,16 @@ def _run_issue(args: dict) -> CmdSpec:
     return CmdSpec(["bash", "run_issue.sh"], env=env)
 
 
+def _site_sync(args: dict) -> CmdSpec:
+    n = _issue(args["issue"])
+    if n == "-1":
+        raise ValueError("site.json 归档只支持正整数期号（-1 测试期不写站点数据）")
+    argv = [PY, "-m", "sitejson", "sync", "--issue", n]
+    if args.get("dry_run"):
+        argv.append("--dry-run")
+    return CmdSpec(argv)
+
+
 # ---- pubai4s（子模块推文流水线）--------------------------------------------
 # 写稿默认由 subagent 本体按 submodules/PubAI4S/docs/prompts/ 提示词完成（见
 # src/agent/*.md）；这三个工具只覆盖确定性步骤与「走 API」全流程模式。
@@ -287,8 +307,11 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
     ToolDef(
         "revisit",
         "回访捕获过文章的完整评论线程（幂等 upsert，可断点续跑）。"
-        "7 天后重访更新。",
-        _schema({"window": {"type": "string", "description": "'D1 D2' 两个整数，如 '10 3'"},
+        "7 天后重访更新；已回访过的默认跳过。",
+        _schema({"window": {"type": "string", "description": "相对首现窗口 'D1 D2' 两个整数，如 '10 3'（与 window_dates 互斥）"},
+                 "window_dates": {"type": "string",
+                                  "description": "绝对首现窗口 'START END' 两个 ISO 日期（起含止不含），"
+                                                 "如 '2026-09-07 2026-09-14'（与 window 互斥）"},
                  "limit": {"type": "integer", "description": "本次最多回访条数（可分批）"}}),
         _revisit),
     ToolDef(
@@ -302,6 +325,8 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
                                                  "不传时正整数期号自动按期号推算"},
                  "window_field": {"type": "string",
                                   "description": "日期基准：captured_at（默认）/ last_commented"},
+                 "force_deep": {"type": "boolean",
+                                "description": "无视已回访标记，强制重抓短名单完整评论（默认 false）"},
                  "run_id": {"type": "string", "description": "报告日期，默认今天"}},
                 required=["issue"]),
         _rank),
@@ -378,6 +403,16 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
                  "dry_run": {"type": "boolean", "description": "只预览 pick 不下载"}},
                 required=["issue"]),
         _run_issue),
+    ToolDef(
+        "site_sync",
+        "官网归档（幂等）：把本期期号/日期/素材窗口/归档条目写进 "
+        "src/site/src/data/site.json（公众号链接除外——发布后在 issues[].wechatUrl 补链接再跑一次即同步首页 CTA）。"
+        "不 commit、不 push；-1 测试期不支持。",
+        _schema({"issue": {"type": "string", "description": "正整数期号（-1 不支持）"},
+                 "dry_run": {"type": "boolean", "description": "只打印将写入的变化，不改文件"}},
+                required=["issue"]),
+        _site_sync),
+    # ---- pubai4s（子模块推文流水线）----
     ToolDef(
         "pubai4s_fetch",
         "AI4S 推文流水线·抓取：仓库元数据 + README + 官网爬取（链接索引/页面摘要/教程配图）"

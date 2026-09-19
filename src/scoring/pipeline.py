@@ -12,6 +12,7 @@ import json
 import shutil
 import sys
 import threading
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -240,10 +241,20 @@ def cmd_coverage(args) -> int:
 # ---- enrich ---------------------------------------------------------------
 
 def cmd_enrich(args) -> int:
-    """每日预热：对全部未缓存文章跑 CrossRef DOI 解析 + v3 拉取（TTL 缓存，rank 时窗口内已命中）。"""
-    cfg = config_mod.ScoringConfig()
-    sstore = ScoringStore(args.db)
-    client = PubPeerClient(ClientConfig(delay=args.delay))
+    """每日预热：对全部未缓存文章跑 CrossRef DOI 解析 + v3 拉取（TTL 缓存，rank 时窗口内已命中）。
+
+    异常处理：打开库 / 富集阶段的未预期异常都打印完整 traceback 到 stderr 并退出 1。
+    本地 cron 只回显「enrich 本轮失败（见上方日志）」，若这里不透出真实原因，
+    日志里就只剩一句无信息量的失败提示（曾因此把所有失败误判为网络问题）。
+    """
+    try:
+        cfg = config_mod.ScoringConfig()
+        sstore = ScoringStore(args.db)
+        client = PubPeerClient(ClientConfig(delay=args.delay))
+    except Exception as exc:            # noqa: BLE001 —— 如 database is locked / 无法打开库
+        print(f"enrich: 打开数据库失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
     try:
         captures = sstore.all_captures()
         pubs = sstore.all_publications()
@@ -251,8 +262,13 @@ def cmd_enrich(args) -> int:
         print(f"enrich: DB 不可读（{exc}），跳过本轮", file=sys.stderr)
         return 0
     pub_doi_map = {p["pubpeer_id"]: p.get("doi") for p in pubs if p.get("doi")}
-    dois, n_resolved, n_v3 = _run_enrich(client, sstore, captures, pub_doi_map, cfg, args,
-                                         limit=args.limit)
+    try:
+        dois, n_resolved, n_v3 = _run_enrich(client, sstore, captures, pub_doi_map, cfg, args,
+                                             limit=args.limit)
+    except Exception as exc:            # noqa: BLE001 —— 读写中途失败也透出真实原因
+        print(f"enrich 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
     print(f"enrich done: {n_resolved} DOI resolved, {n_v3} v3 feedback fetched, "
           f"{len(dois)} cached dois", flush=True)
     return 0

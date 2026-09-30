@@ -4,13 +4,12 @@
 - 派生规则单一锚点：`WEEK_START`（第 1 期数据收集起始日，默认 2026-08-03，与
   `run_issue.sh` / `llm.generate` / `agent.tools` 同算法）——
   窗口 = [start, start+6]，发布日 = start+9（周三）。
-- 幂等且绝不覆盖人工数据：`issues[].wechatUrl` 是公众号链接的唯一来源，
-  `wechat.url/label` 由它派生；派生不出链接且期号未提升时保持原值。
+- 幂等且完全派生：`issues[].wechatUrl` 是公众号链接的唯一人工填写处，
+  `wechat.url/label` 每次 sync 都由它重算（空 → url 空 + 默认「阅读第 N 期周报」占位）。
 - 只写 `src/site/src/data/site.json`，不 commit、不 push。
 """
 
 from .sync import (
-    PENDING_LABEL_PREFIX,
     READ_LABEL_PREFIX,
     SITE_JSON_DEFAULT,
     WEEK_START_DEFAULT,
@@ -25,7 +24,6 @@ from .sync import (
 )
 
 __all__ = [
-    "PENDING_LABEL_PREFIX",
     "READ_LABEL_PREFIX",
     "SITE_JSON_DEFAULT",
     "WEEK_START_DEFAULT",

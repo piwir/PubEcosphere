@@ -14,7 +14,9 @@ Vue 3 + Vite + vue-router（hash 路由），无 UI 库、手写 CSS。构建产
 2. 再跑一次 `python -m sitejson sync --issue N`（同步首页 CTA `wechat.url` / `wechat.label`）；
 3. push，GitHub Actions 自动重新部署。
 
-链接未发布时 `wechat.url` 为空，首页 CTA 显示不可点的「第 N 期周报即将发布」。
+链接未发布时 `wechat.url` 为空，首页 CTA 渲染成不可点的同一文案（灰色占位）。
+`wechat` 由每次 sync **重新派生**，不要手工改它：`label` 恒为默认文案「阅读第 N 期周报」
+（不随是否已发布变化）；`issues[].wechatUrl` 一填，首页 CTA 与归档页同时生效（只填一处）。
 `python -m sitejson --selftest` 可离线自检（派生规则与已发布 1–5 期回归）；
 `--dry-run` 只看将发生的变化、不写盘。窗口 = `WEEK_START+(N-1)*7` 起 7 天，
 发布日 = 窗口起始 +9 天（周三）。

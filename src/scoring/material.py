@@ -459,7 +459,8 @@ def build_material(pub_dir: Path, issue_dir: Path | None = None,
             merged = {p.name for p in [*result["first_paths"], *result["sleuth_paths"],
                                        *result["author_paths"]]}
             for f in files_dir.iterdir():
-                if (f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp")
+                if (f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp",
+                                                        ".bmp", ".tif", ".tiff")
                         and f.name not in merged):
                     f.unlink()
 

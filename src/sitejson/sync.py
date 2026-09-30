@@ -13,9 +13,9 @@
     1. issues[]：已有第 N 期条目则补 date（summary 仅在为空时补）；否则头部插入
        {issue, date, wechatUrl: "", summary}；
     2. currentIssue / issueDate / window 写成本期派生值；
-    3. wechat（首页 CTA）：issues[N].wechatUrl 非空 → 派生 url + "阅读第 N 期周报"；
-       否则仅在「currentIssue 正从旧值提升到 N」这一刻清空 → "第 N 期周报即将发布"；
-       已提升过且链接仍空时保持原值（尊重手工编辑）。
+    3. wechat（首页 CTA）：**完全由 issues[N].wechatUrl 派生**（唯一人工填写处，每期只填一次）：
+       url = issues[N].wechatUrl（未发布则为空，首页显示不可点的同一文案）；
+       label 恒为默认文案 "阅读第 N 期周报"；即：新一期生成后 wechat 与 issues 始终一致。
     4. tagline / github / ai4s 一概不动。
 
 退出码：成功 0；期号非法 / JSON 非法 / 文件缺失 → 1。
@@ -38,7 +38,7 @@ WEEK_START_DEFAULT = "2026-08-03"
 SITE_JSON_DEFAULT = REPO_ROOT / "src" / "site" / "src" / "data" / "site.json"
 
 SUMMARY_TEMPLATE = "PubPeer 周报 · issue {n}"
-PENDING_LABEL_PREFIX = "第 {n} 期周报即将发布"
+# 首页 CTA 文案：与是否已发布无关，恒为此默认值（未发布时 url 为空 → 渲染成不可点的 span）。
 READ_LABEL_PREFIX = "阅读第 {n} 期周报"
 
 
@@ -152,19 +152,16 @@ def plan_sync(data: dict, issue: int, *, week_start: str | None = None,
     if not isinstance(wechat, dict):
         raise SiteSyncError("site.json 的 wechat 不是对象")
     link = str(entry.get("wechatUrl") or "").strip()
+    # wechat 永远由 issues[N].wechatUrl 派生：填链接只在 issues[] 一处；label 恒为默认文案。
+    label = READ_LABEL_PREFIX.format(n=n)
     if link:
-        label = READ_LABEL_PREFIX.format(n=n)
         if wechat.get("url") != link:
             changes.append(f"~ wechat.url: {wechat.get('url')!r} → {link!r}（取自 issues[{n}].wechatUrl）")
-        if wechat.get("label") != label:
-            changes.append(f"~ wechat.label: {wechat.get('label')!r} → {label!r}")
-        wechat["url"], wechat["label"] = link, label
-    elif data.get("currentIssue") != n:
-        label = PENDING_LABEL_PREFIX.format(n=n)
+    elif wechat.get("url"):
         changes.append(f"~ wechat.url: {wechat.get('url')!r} → ''（第 {n} 期链接未发布）")
+    if wechat.get("label") != label:
         changes.append(f"~ wechat.label: {wechat.get('label')!r} → {label!r}")
-        wechat["url"], wechat["label"] = "", label
-    # else：已提升到期号 N、链接仍空 → 保持原值（可能就是手工填的）
+    wechat["url"], wechat["label"] = link, label
 
     return out, changes
 
@@ -291,8 +288,8 @@ def run_selftest() -> int:
                                               "wechatUrl": "", "summary": "PubPeer 周报 · issue 6"},
               repr(data.get("issues", [{}])[0]))
         check("首次 sync 期号 5 条目保留", data["issues"][1].get("issue") == 5)
-        check("首次 sync wechat 清空",
-              data.get("wechat") == {"url": "", "label": "第 6 期周报即将发布"},
+        check("首次 sync wechat 归一（url 空 + 默认 label）",
+              data.get("wechat") == {"url": "", "label": "阅读第 6 期周报"},
               repr(data.get("wechat")))
         check("首次 sync ai4s 不动", data.get("ai4s") == _FIXTURE["ai4s"])
         check("首次 sync tagline 不动", data.get("tagline") == _FIXTURE["tagline"])
@@ -314,15 +311,19 @@ def run_selftest() -> int:
         check("补链接后 wechat.label", d2["wechat"]["label"] == "阅读第 6 期周报",
               repr(d2["wechat"]["label"]))
 
-        # 5) 已提升期号 + 链接仍空 → 不动手工 wechat
+        # 5) 链接清空 → wechat 归一为默认占位（不保留手工值，永远与 issues 一致）
         d3 = json.loads(path.read_text(encoding="utf-8"))
         d3["issues"][0]["wechatUrl"] = ""
         d3["wechat"] = {"url": "https://manual.example/6", "label": "手工文案"}
         path.write_text(_dump(d3), encoding="utf-8")
-        d4, _ = sync_site_json(path, 6, quiet=True)
-        check("已提升期号时保留手工 wechat",
-              d4["wechat"] == {"url": "https://manual.example/6", "label": "手工文案"},
+        d4, changes5 = sync_site_json(path, 6, quiet=True)
+        check("链接清空后 wechat.url 归一",
+              d4["wechat"] == {"url": "", "label": "阅读第 6 期周报"},
               repr(d4["wechat"]))
+        check("链接清空后打印 label 变化",
+              any("wechat.label" in c for c in changes5), repr(changes5))
+        _, changes5b = sync_site_json(path, 6, quiet=True)
+        check("归一后再跑无变化（幂等）", changes5b == [], repr(changes5b))
 
         # 6) dry-run 不写盘
         before = path.read_text(encoding="utf-8")
@@ -349,5 +350,5 @@ def run_selftest() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("sitejson selftest: 全部通过（派生回归/首次写入/幂等/不覆盖人工数据/dry-run/非法输入）")
+    print("sitejson selftest: 全部通过（派生回归/首次写入/幂等/wechat 归一/dry-run/非法输入）")
     return 0

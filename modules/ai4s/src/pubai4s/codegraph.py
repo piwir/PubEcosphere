@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import json
 import subprocess
 import tarfile
 import tempfile
@@ -19,7 +20,28 @@ import urllib.request
 from pathlib import Path
 
 CODEGRAPH_BIN = os.environ.get("CODEGRAPH_BIN", "codegraph")  # 显式指路径可覆盖
-TARBALL_LIMIT = 100 * 1024 * 1024
+# tarball 上限：默认 100MB；数据/权重占大头的仓库（如 700MB+）可设 PUBAI4S_TARBALL_LIMIT_MB 调大
+TARBALL_LIMIT_MB = int(os.environ.get("PUBAI4S_TARBALL_LIMIT_MB", "100"))
+TARBALL_LIMIT = TARBALL_LIMIT_MB * 1024 * 1024
+TREE_API = "https://api.github.com/repos/{owner}/{name}/git/trees/{branch}?recursive=1"
+TREE_FALLBACK_DEPTH = 4    # API 回退树的展开层数（与 codegraph files 的树同格式，供 archmap 解析）
+TREE_FALLBACK_TIMEOUT = 30.0
+# 文件后缀 → 语言/类型标注（回退树用它代替 codegraph 的「N symbols」，让 archmap 能识别文件）
+_EXT_LANG = {
+    ".py": "python", ".pyi": "python", ".ipynb": "notebook", ".js": "javascript",
+    ".mjs": "javascript", ".cjs": "javascript", ".ts": "typescript", ".tsx": "typescript",
+    ".jsx": "javascript", ".java": "java", ".kt": "kotlin", ".go": "go",
+    ".rs": "rust", ".rb": "ruby", ".php": "php", ".swift": "swift", ".scala": "scala",
+    ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+    ".cu": "cuda", ".m": "matlab", ".r": "r", ".jl": "julia", ".sh": "shell",
+    ".bash": "shell", ".ps1": "powershell", ".sql": "sql", ".md": "markdown",
+    ".rst": "rst", ".txt": "text", ".json": "json", ".jsonl": "jsonl",
+    ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".ini": "ini", ".cfg": "config",
+    ".csv": "csv", ".tsv": "tsv", ".fa": "fasta", ".fasta": "fasta", ".pdb": "pdb",
+    ".npz": "npz", ".npy": "npy", ".pt": "weights", ".pth": "weights", ".ckpt": "weights",
+    ".safetensors": "weights", ".png": "image", ".jpg": "image", ".jpeg": "image",
+    ".svg": "image", ".pdf": "pdf", ".html": "html", ".css": "css",
+}
 DOWNLOAD_READ_TIMEOUT = 120.0  # 单次 socket 读超时，防真卡死；不设总时限（大小上限即最坏上界）
 INIT_TIMEOUT = 600.0   # init 含首次索引，是唯一慢命令（大仓库放宽）
 CMD_TIMEOUT = 60.0     # files / query / context 共用
@@ -86,6 +108,110 @@ def _safe_extract(tarball: Path, dest: Path) -> None:
             tf.extract(member, dest)
 
 
+def _fetch_api_tree(owner: str, name: str, branch: str) -> tuple[dict | None, str]:
+    """GitHub API 文件树（1 次请求，不下载仓库内容）→ (响应 dict, "")；失败 → (None, 原因)。
+
+    用于 tarball 超限/网络失败时的回退：拿到真实目录与文件清单（无符号与调用关系）。
+    有 GITHUB_TOKEN / GH_TOKEN 时自动带上，避免 60 req/h 未认证限速。
+    """
+    req = urllib.request.Request(
+        TREE_API.format(owner=owner, name=name, branch=branch),
+        headers={"User-Agent": "pubai4s/0.1", "Accept": "application/vnd.github+json"},
+    )
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=TREE_FALLBACK_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError) as exc:
+        return None, str(exc)[:160]
+    if not isinstance(data, dict) or not isinstance(data.get("tree"), list):
+        return None, "响应缺少 tree 字段"
+    return data, ""
+
+
+def _render_api_tree(entries: list[dict], max_depth: int = TREE_FALLBACK_DEPTH) -> str:
+    """把 API 条目渲染成 codegraph `files` 风格的树文本（`├── ` / `└── ` + 4 空格缩进）。
+
+    只保留目录与文件（跳过 submodule 等非常规类型）；超过 max_depth 的层级折叠为「…」。
+    """
+    blobs = 0
+    tree: dict = {}
+
+    def _ensure(parts: list[str]) -> dict:
+        cur = tree
+        for part in parts:
+            cur = cur.setdefault(part, {})
+        return cur
+
+    for entry in entries:
+        path = entry.get("path") if isinstance(entry, dict) else None
+        if not isinstance(path, str) or not path:
+            continue
+        parts = path.split("/")
+        kind = entry.get("type")
+        if kind == "blob":
+            blobs += 1
+        elif kind != "tree":
+            continue
+        if len(parts) > max_depth:
+            continue
+        # 目录 → 子 dict；文件 → None（区分「空目录」与「文件」，截断深度后仍不会误判）
+        if kind == "tree":
+            _ensure(parts)
+        else:
+            _ensure(parts[:-1])[parts[-1]] = None
+
+    lines: list[str] = []
+
+    def _label(name: str, is_dir: bool) -> str:
+        """目录原样；文件按后缀标注语言/类型（与 codegraph 的「name (python, N symbols)」同形）。"""
+        if is_dir:
+            return name
+        suffix = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        return f"{name} ({_EXT_LANG.get('.' + suffix, suffix or 'file')})"
+
+    def _walk(node: dict, depth: int, prefix: str) -> None:
+        names = sorted(node, key=lambda k: (node[k] is None, k.lower()))  # 目录优先
+        for idx, key in enumerate(names):
+            last = idx == len(names) - 1
+            child = node[key]
+            lines.append(f"{prefix}{'└── ' if last else '├── '}{_label(key, child is not None)}")
+            if child is None:
+                continue
+            if depth < max_depth:
+                _walk(child, depth + 1, prefix + ("    " if last else "│   "))
+            else:
+                lines.append(f"{prefix}{'    ' if last else '│   '}└── …")
+
+    _walk(tree, 1, "")
+    # 头部保持 codegraph `files` 同形（archmap 靠 `Project Structure (N files)` 取文件数）
+    header = f"Project Structure ({blobs} files):"
+    return header + "\n\n" + "\n".join(lines) if lines else ""
+
+
+def _tree_fallback(owner: str, name: str, branch: str, reason: str,
+                   summary_limit: int) -> tuple[str, list[str]]:
+    """tarball 不可用时的回退：用 GitHub API 文件树产出「文件树」段 + 说明。"""
+    data, err = _fetch_api_tree(owner, name, branch)
+    if data is None:
+        return "", [f"tarball {reason}，且 GitHub API 文件树回退失败：{err}"]
+    rendered = _render_api_tree(data["tree"])
+    if not rendered:
+        return "", [f"tarball {reason}，API 文件树为空"]
+    sections = ["## 文件树\n\n" + _truncate(rendered, PART_LIMITS["tree"])]
+    notes = [f"仓库 tarball {reason}，已回退到 GitHub API 文件树（tarball 上限 {TARBALL_LIMIT_MB}MB，"
+             "可用 PUBAI4S_TARBALL_LIMIT_MB 调整；目录树展开至 "
+             f"{TREE_FALLBACK_DEPTH} 层，更深的层级折叠为「…」）；回退树未做本地索引，"
+             "因此**没有关键符号与代码关系**"]
+    if data.get("truncated"):
+        notes.append("API 返回的树被 GitHub 截断，文件清单不完整")
+    sections.append("## 说明\n\n" + "；".join(notes))
+    warnings = [f"codegraph 降级为 API 文件树（{reason}）：无符号与调用关系"]
+    return _truncate("\n\n".join(sections), summary_limit), warnings
+
+
 def _repo_root(work: Path) -> Path:
     """codeload 顶层目录名是 <name>-<branch>（分支可含 `/`，不猜名）：取唯一顶层目录。"""
     dirs = [p for p in work.iterdir() if p.is_dir()]
@@ -113,7 +239,8 @@ def _summary_inner(work: Path, owner: str, name: str, branch: str,
     try:
         tarball = work / "repo.tar.gz"
         if not _download_tarball(owner, name, branch, tarball):
-            return "", [f"tarball 下载失败（>100MB 或网络错误）：{owner}/{name}"]
+            return _tree_fallback(owner, name, branch,
+                                  f"下载失败（>{TARBALL_LIMIT_MB}MB 或网络错误）", summary_limit)
         _safe_extract(tarball, work)
         root = _repo_root(work)
     except (tarfile.TarError, OSError, RuntimeError) as exc:

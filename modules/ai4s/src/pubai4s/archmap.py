@@ -31,7 +31,8 @@ LINE = "#E6E2D6"
 
 _TREE_HEADER = "## 文件树"
 _LINE_RE = re.compile(r"^((?:│   |    )*)(?:├── |└── )(.*)$")
-_FILE_RE = re.compile(r"^(.*) \([a-zA-Z0-9_+#.-]+, \d+ symbols\)$")
+# 文件行：既匹配 codegraph 的「name (python, 76 symbols)」，也匹配 API 回退树的「name (python)」
+_FILE_RE = re.compile(r"^(.*) \([a-zA-Z0-9_+#.-]+(?:, \d+ symbols)?\)$")
 _FILES_RE = re.compile(r"Project Structure \((\d+) files\)")
 
 

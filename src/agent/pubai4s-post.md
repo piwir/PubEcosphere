@@ -13,7 +13,8 @@
 2. **阶段A（自己写材料，不调外部 LLM 接口）**：读 `submodules/PubAI4S/docs/prompts/prompt_extract.md` 全文作为行为准则，读 `output/PubAI4S/<owner>-<repo>/inputs/` 下 meta.txt / readme.md / website.txt / codegraph.txt（任一可能缺失，如实处理）→ 严格按其模板写 `output/PubAI4S/<owner>-<repo>/material.md`（**不含**「已下载图片清单」小节）→ 末尾追加图片清单：用 `python -c` 调 `pubai4s.extract.append_image_manifest`（或按 `images.md` 等价拼接 `- ![alt](filename)` 行；fetch 在 codegraph 可用时会把 `arch.png` 生成好并置于清单首位，照单拼接即可）。
 3. **阶段B（自己写稿）**：读 `submodules/PubAI4S/docs/prompts/prompt_writer.md` 全文作为唯一骨架依据 + material.md 作为唯一事实依据 → 写 `output/PubAI4S/<owner>-<repo>/post.md`（约 2000-3000 字）。
 4. **渲染**：`python -m pubai4s render output/PubAI4S/<owner>-<repo>` → 产出 `post.html` + `post-base64.html`。
-5. **人工审核**：报告产物路径与自检结果，等用户过稿；不自行发布。
+5. **官网归档**：`python -m sitejson sync-ai4s --dir output/PubAI4S/<owner>-<repo>`（MCP 为 `site_sync` 传 `out_dir`）把本篇写进 `src/site/src/data/site.json` 的 `ai4s.posts`——只动 `ai4s`（周报字段一概不动）、按 repo 去重、幂等、不 commit 不 push；`repo` / 项目名 / 摘要 / 日期从 `post.md` 派生（发布日不同用 `--date` 指定）。**公众号链接发布后在 `ai4s.posts[].url` 补上再重跑一次**，AI4S 页即由「即将发布」变为可点阅读；补链接时不要重跑 fetch/写稿。
+6. **人工审核**：报告产物路径与自检结果，等用户过稿；不自行发布。
 
 ## 自检要点（写完 post.md 逐条核对）
 
@@ -22,6 +23,7 @@
 - 结尾依次为 `#AI4S`、一行声明「本文由 AI 辅助整理，基于仓库公开信息与官方文档。」、`> GitHub：[github.com/<owner>/<repo>](...)` blockquote（全文唯一可点击链接）。
 - 图片内容图 ≤5 张（arch.png 不计）、全部来自清单、文件名一致；内容图下一空行 + 斜体图注行（cover/arch 无图注）；账号图标/二维码/致谢图/第三方 logo 不选。
 - 正文不出现具体社交平台名（命令行原样参数除外）；无「快速上手安装表以外」的表格 / HTML / fenced 代码块；加粗适量（无整段连续加粗）；材料里没有的模块、符号、数字、链接一律不写。
+- 官网归档条目只含仓库名 / 项目名 / 日期 / 一句话摘要 / 公众号链接（site.json 随仓库公开），**不放推文正文**。
 
 ## 替代模式
 

@@ -28,9 +28,11 @@
 
 > 客户端健康检查时 cwd=`/`、PATH 无 conda，`mcp.sh` 负责自切仓库根 + 解析 python；找不到 python 时加 `"env": {"PYTHON": "/path/to/python"}`。
 
+**Pi 客户端**（内置 MCP，无需第三方 adapter）：同一段配置放项目 `.pi/mcp.json` 或用户级 `~/.pi/agent/mcp.json`，首次需信任项目（`/trust`）。默认 17 工具全部走 `codemode`（模型用脚本调，工具名 `mcp__pubecosphere__<tool>`）；想少走一层脚本就给单个工具加 `"toolExposure": {"rank": "direct"}` 之类，直接声明为 `mcp__pubecosphere__rank`。
+
 - 周报 14 工具：`status` / `preflight` / `capture` / `revisit` / `rank` / `pick` / `material` / `generate` / `assemble` / `md2html` / `polish_html` / `inline_images` / `run_issue` / `site_sync`。
   - `revisit` 支持 `window`（相对天）与 `window_dates`（绝对 ISO 日期，起含止不含）二选一；`rank` 默认按正整数期号自动推绝对窗口，可传 `window_dates` / `window_field` / `force_deep`。
-  - `site_sync` 把本期期号/日期/素材窗口/归档条目写进 `src/site/src/data/site.json`（公众号链接除外，发布后在 `issues[].wechatUrl` 补链接再跑一次），幂等、不 commit、不 push。
+  - `site_sync` 二选一：周报传 `issue`（把期号/日期/素材窗口/归档条目写进 `src/site/src/data/site.json`，公众号链接除外，发布后在 `issues[].wechatUrl` 补链接再跑一次）；AI4S 传 `out_dir=output/PubAI4S/<owner>-<repo>`（只动 `ai4s.posts`，发布后在 `ai4s.posts[].url` 补链接再跑一次）。幂等、不 commit、不 push。
 - 推文 3 工具：`pubai4s_fetch`（抓取 inputs，不调 LLM）/ `pubai4s_render`（post.md → base64 html）/ `pubai4s_run`（全流程走 .env 模型，供无头场景）。
 
 **使用建议**：agent 起步先 `status` 自查；`pick` 先 `dry_run=true` 给人工批准；写稿产物人工审核后再发布。

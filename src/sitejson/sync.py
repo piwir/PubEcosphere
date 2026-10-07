@@ -3,6 +3,7 @@
 用法：
     python -m sitejson sync --issue 6              # 把第 6 期写进 site.json（幂等）
     python -m sitejson sync --issue 6 --dry-run    # 只看将发生的变化，不写盘
+    python -m sitejson sync-ai4s --dir output/PubAI4S/<owner>-<repo>   # AI4S 推文归档（幂等）
     python -m sitejson --selftest                  # 离线自测（临时目录 fixture）
 
 派生规则（与已发布第 1–5 期实测值一致）：
@@ -18,6 +19,14 @@
        label 恒为默认文案 "阅读第 N 期周报"；即：新一期生成后 wechat 与 issues 始终一致。
     4. tagline / github / ai4s 一概不动。
 
+AI4S 推文归档（sync-ai4s，与上互不影响）：
+    1. 只动 ai4s.posts（issues / currentIssue / window / wechat / tagline / github 一概不动）；
+    2. 条目从 PubAI4S 产物目录派生：repo/name/summary 取自 post.md 与 inputs/meta.txt，
+       date 默认取 post.md 修改日期（= 生成日，发布日不同时传 --date）；
+    3. ai4s.posts[].url 是公众号链接的唯一人工填写处（与 issues[].wechatUrl 同理）：
+       已有非空链接不会被空值覆盖；发布后传 --url 或用编辑器补上再重跑即可；
+    4. 按 repo 去重：同一仓库重复跑只更新 date/name/summary，不新增条目。
+
 退出码：成功 0；期号非法 / JSON 非法 / 文件缺失 → 1。
 """
 
@@ -26,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import date, timedelta
@@ -184,6 +194,137 @@ def sync_site_json(site_json_path: str | Path | None = None, issue: int = 0, *,
     return new, changes
 
 
+# ---- AI4S 推文归档（sync-ai4s）-------------------------------------------
+
+AI4S_GITHUB_DEFAULT = "https://github.com/piwir/PubAI4S"
+AI4S_DIR_DEFAULT = REPO_ROOT / "output" / "PubAI4S"
+AI4S_POST_KEYS = ("no", "repo", "name", "date", "summary", "url")
+# 结尾固定块 `> GitHub：[github.com/o/n](...)`：两份提示词约定的唯一出处，避开正文里的第三方链接
+_ENDING_REPO_RE = re.compile(r"^>\s*GitHub[：:]\s*\[([^\]]+)\]", re.M)
+_META_REPO_RE = re.compile(r"仓库链接[：:]\s*(https?://github\.com/[^\s)]+)")
+_MD_TITLE_RE = re.compile(r"^#\s+(.+?)\s*$", re.M)
+
+
+def _ai4s_dir(raw: str | Path) -> Path:
+    p = Path(raw)
+    return p if p.is_absolute() else REPO_ROOT / p
+
+
+def _norm_repo(raw: str) -> str:
+    """把各种写法的仓库地址归一为 owner/repo（去 scheme、github.com/ 前缀、.git、首尾斜杠）。"""
+    repo = raw.strip()
+    for prefix in ("https://github.com/", "http://github.com/", "github.com/"):
+        repo = repo.removeprefix(prefix)
+    return repo.removesuffix(".git").strip("/")
+
+
+def derive_ai4s_meta(post_dir: Path) -> tuple[dict, list[str]]:
+    """从 PubAI4S 产物目录派生条目字段（repo/name/summary/date）——只读 post.md 与 inputs/meta.txt。"""
+    post_md = post_dir / "post.md"
+    if not post_md.exists():
+        raise SiteSyncError(f"找不到推文正文：{post_md}（先跑 pubai4s fetch 并完成写稿/渲染）")
+    text = post_md.read_text(encoding="utf-8")
+
+    repo = ""
+    m = _ENDING_REPO_RE.search(text)  # 结尾固定块（避免误取正文里的 AlphaFold3 / uv 等第三方链接）
+    if m:
+        repo = _norm_repo(m.group(1))
+    if not repo:
+        meta = post_dir / "inputs" / "meta.txt"
+        if meta.exists():
+            m2 = _META_REPO_RE.search(meta.read_text(encoding="utf-8"))
+            if m2:
+                repo = _norm_repo(m2.group(1))
+    if "/" not in repo:
+        raise SiteSyncError(f"无法从 {post_md} 推导仓库（需结尾 `> GitHub：[owner/repo](...)` "
+                            f"或 inputs/meta.txt 的仓库链接）")
+
+    title = ""
+    mt = _MD_TITLE_RE.search(text)
+    if mt:
+        title = mt.group(1).strip()
+    name = title.split(" · ")[0].strip() if title else repo.split("/")[-1]
+    warnings: list[str] = []
+    if not title:
+        warnings.append("post.md 缺主标题 `# 项目名 · 钩子`：name 退化为仓库名、summary 留空")
+    return {"repo": repo, "name": name, "summary": title,
+            "date": date.fromtimestamp(post_md.stat().st_mtime).isoformat()}, warnings
+
+
+def plan_sync_ai4s(data: dict, *, repo: str, name: str, summary: str, pub_date: str,
+                   url: str | None = None, no: int | None = None,
+                   date_explicit: bool = False) -> tuple[dict, list[str]]:
+    """在内存里算出新 site.json 与变化清单：只动 ai4s.posts，按 repo 去重。
+
+    不覆盖人工值：`url` 只在显式传值时写；`date` 派生自 post.md 修改时间（非确定），
+    已有条目仅在显式 `--date`（date_explicit）时更新，避免「发布后补链接再跑一次」把发布日改回生成日。
+    """
+    out = json.loads(json.dumps(data))
+    changes: list[str] = []
+
+    ai4s = out.get("ai4s")
+    if not isinstance(ai4s, dict):
+        ai4s = {"github": AI4S_GITHUB_DEFAULT, "posts": []}
+        out["ai4s"] = ai4s
+        changes.append(f"+ ai4s 缺失 → 新建（github={AI4S_GITHUB_DEFAULT}）")
+    posts = ai4s.get("posts")
+    if not isinstance(posts, list):
+        raise SiteSyncError("site.json 的 ai4s.posts 不是数组")
+
+    entry = next((p for p in posts if isinstance(p, dict) and p.get("repo") == repo), None)
+    if entry is None:
+        existing = [p.get("no") for p in posts
+                    if isinstance(p, dict) and isinstance(p.get("no"), int)]
+        n = no if no is not None else (max(existing) + 1 if existing else 1)
+        entry = {"no": n, "repo": repo, "name": name, "date": pub_date,
+                 "summary": summary, "url": (url or "").strip()}
+        posts.insert(0, entry)  # 与 site/README 的人工规则一致：头部加一条
+        changes.append(f"+ ai4s.posts 头部新增 NO.{n} {repo}（date={pub_date}）")
+    else:
+        for key, val in (("name", name), ("summary", summary)):
+            if val and entry.get(key) != val:
+                changes.append(f"~ ai4s.posts[{repo}].{key}: {entry.get(key)!r} → {val!r}")
+                entry[key] = val
+        # date 派生值非确定：仅显式 --date 或条目尚无日期时更新（对齐 url 的人工值保护）
+        if pub_date and (date_explicit or not entry.get("date")) and entry.get("date") != pub_date:
+            changes.append(f"~ ai4s.posts[{repo}].date: {entry.get('date')!r} → {pub_date!r}")
+            entry["date"] = pub_date
+        # url 只在显式传值时写：它是公众号链接的唯一人工填写处，不能被空值抹掉
+        if url and url.strip() and entry.get("url") != url.strip():
+            changes.append(f"~ ai4s.posts[{repo}].url: {entry.get('url')!r} → {url.strip()!r}")
+            entry["url"] = url.strip()
+
+    for key in AI4S_POST_KEYS:  # 字段顺序归一（与既有条目一致），不引入额外 key
+        if key in entry:
+            entry[key] = entry.pop(key)
+    return out, changes
+
+
+def sync_ai4s_post(site_json_path: str | Path | None = None, post_dir: str | Path = AI4S_DIR_DEFAULT,
+                   *, date_override: str | None = None, url: str | None = None,
+                   summary: str | None = None, name: str | None = None, repo: str | None = None,
+                   no: int | None = None, dry_run: bool = False,
+                   quiet: bool = False) -> tuple[dict, list[str]]:
+    """读 site.json → 从产物目录派生 → 计划 →（非 dry-run 时）原子写回。"""
+    path = Path(site_json_path or SITE_JSON_DEFAULT)
+    directory = _ai4s_dir(post_dir)
+    derived, warnings = derive_ai4s_meta(directory)
+    data = _load(path)
+    new, changes = plan_sync_ai4s(
+        data, repo=repo or derived["repo"], name=name or derived["name"],
+        summary=derived["summary"] if summary is None else summary,
+        pub_date=date_override or derived["date"], url=url, no=no,
+        date_explicit=date_override is not None)
+    if not quiet:
+        for w in warnings:
+            print(f"  [告警] {w}", file=sys.stderr)
+        if not (directory / "post-base64.html").exists():
+            print(f"  [告警] 未找到 {directory / 'post-base64.html'}（渲染未完成？）", file=sys.stderr)
+    if not dry_run:
+        _write_atomic(path, _dump(new))
+    return new, changes
+
+
 # ---- CLI -----------------------------------------------------------------
 
 def _cmd_sync(args: argparse.Namespace) -> int:
@@ -207,6 +348,33 @@ def _cmd_sync(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_sync_ai4s(args: argparse.Namespace) -> int:
+    try:
+        data, changes = sync_ai4s_post(
+            args.site_json, args.dir, date_override=args.date, url=args.url,
+            summary=args.summary, name=args.name, repo=args.repo,
+            no=int(args.no) if args.no else None, dry_run=args.dry_run)
+    except (SiteSyncError, ValueError) as exc:
+        print(f"sitejson 失败：{exc}", file=sys.stderr)
+        return 1
+    prefix = "[dry-run] " if args.dry_run else ""
+    state = "未写盘" if args.dry_run else "已更新"
+    print(f"{prefix}site.json {state}：{args.site_json}（AI4S 推文归档）")
+    for c in changes:
+        print(f"  {c}")
+    if not changes:
+        print("  无变化（已是最新）")
+    ai4s = data.get("ai4s")
+    posts = ai4s.get("posts") if isinstance(ai4s, dict) else None
+    pending = [p.get("repo") for p in (posts or []) if isinstance(p, dict) and not p.get("url")]
+    if pending:
+        print("  提示：以下推文尚无公众号链接——发布后在 ai4s.posts[].url 补上（或重跑时传 --url），"
+              f"AI4S 页即从「即将发布」变为可点阅读：{', '.join(pending)}")
+    if args.json:
+        print(_dump(data), end="")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m sitejson", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -221,10 +389,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--summary", default=None, help="覆盖归档一句话摘要")
     p.add_argument("--dry-run", action="store_true", help="只打印将发生的变化，不改文件")
     p.add_argument("--json", action="store_true", help="同时打印写入后的完整 site.json")
+
+    pa = sub.add_parser("sync-ai4s", help="把一篇 AI4S 推文写进 site.json 的 ai4s.posts（幂等，只动 ai4s）")
+    pa.add_argument("--dir", required=True, help="PubAI4S 产物目录（如 output/PubAI4S/<owner>-<repo>）")
+    pa.add_argument("--site-json", default=str(SITE_JSON_DEFAULT), help="site.json 路径")
+    pa.add_argument("--date", default=None, help="发布日（ISO；默认取 post.md 修改日）")
+    pa.add_argument("--url", default=None, help="公众号链接（唯一人工填写处；不传则保留既有值）")
+    pa.add_argument("--summary", default=None, help="覆盖一句话摘要（默认取 post.md 主标题）")
+    pa.add_argument("--name", default=None, help="覆盖项目名（默认取主标题 · 之前的部分）")
+    pa.add_argument("--repo", default=None, help="覆盖 owner/repo（默认从结尾 GitHub 块推导）")
+    pa.add_argument("--no", default=None, help="覆盖序号（默认取现有最大序号 +1）")
+    pa.add_argument("--dry-run", action="store_true", help="只打印将发生的变化，不改文件")
+    pa.add_argument("--json", action="store_true", help="同时打印写入后的完整 site.json")
     args = ap.parse_args(argv)
 
     if args.selftest:
         return run_selftest()
+    if args.cmd == "sync-ai4s":
+        return _cmd_sync_ai4s(args)
     if args.cmd != "sync":
         ap.print_help()
         return 1
@@ -345,10 +527,100 @@ def run_selftest() -> int:
         except SiteSyncError:
             pass
 
+        # 8) AI4S 推文归档（sync-ai4s）
+        post_dir = Path(tmp) / "PubAI4S" / "google-deepmind-synthidbio"
+        (post_dir / "inputs").mkdir(parents=True)
+        (post_dir / "post.md").write_text(
+            "# SynthID Bio · 为 AI 生成的蛋白质序列与结构嵌入保功能水印\n\n"
+            "正文里还有第三方链接 https://github.com/google-deepmind/alphafold3 与 "
+            "https://github.com/astral-sh/uv\n\n"
+            "> GitHub：[github.com/google-deepmind/synthidbio]"
+            "(https://github.com/google-deepmind/synthidbio)\n", encoding="utf-8")
+        (post_dir / "inputs" / "meta.txt").write_text(
+            "仓库链接：https://github.com/google-deepmind/synthidbio\n", encoding="utf-8")
+        derived, warns = derive_ai4s_meta(post_dir)
+        check("ai4s 派生 repo（取结尾 GitHub 块，非正文第三方链接）",
+              derived["repo"] == "google-deepmind/synthidbio", repr(derived["repo"]))
+        check("ai4s 派生 name", derived["name"] == "SynthID Bio", repr(derived["name"]))
+        check("ai4s 派生 summary", derived["summary"].startswith("SynthID Bio · "),
+              repr(derived["summary"]))
+        check("ai4s 派生无告警", warns == [], repr(warns))
+
+        before_ai4s = json.loads(path.read_text(encoding="utf-8"))
+        d5, ch = sync_ai4s_post(path, post_dir, date_override="2026-10-01", quiet=True)
+        check("ai4s 首次写入有变化", bool(ch), repr(ch))
+        check("ai4s 序号从 1 起", d5["ai4s"]["posts"][0]["no"] == 1, repr(d5["ai4s"]["posts"][0]))
+        check("ai4s 只动 ai4s（其余顶层字段逐字不变）",
+              {k: v for k, v in d5.items() if k != "ai4s"}
+              == {k: v for k, v in before_ai4s.items() if k != "ai4s"})
+        check("ai4s 字段顺序", list(d5["ai4s"]["posts"][0]) == list(AI4S_POST_KEYS),
+              repr(list(d5["ai4s"]["posts"][0])))
+
+        _, ch2 = sync_ai4s_post(path, post_dir, date_override="2026-10-01", quiet=True)
+        check("ai4s 幂等：第二次无变化", ch2 == [], repr(ch2))
+
+        d7 = json.loads(path.read_text(encoding="utf-8"))
+        d7["ai4s"]["posts"][0]["url"] = "https://mp.weixin.qq.com/s/AI4S1"
+        path.write_text(_dump(d7), encoding="utf-8")
+        d8, _ = sync_ai4s_post(path, post_dir, date_override="2026-10-01", quiet=True)
+        check("ai4s 不覆盖已有链接（唯一人工填写处）",
+              d8["ai4s"]["posts"][0]["url"] == "https://mp.weixin.qq.com/s/AI4S1",
+              repr(d8["ai4s"]["posts"][0]["url"]))
+        d9, ch9 = sync_ai4s_post(path, post_dir, date_override="2026-10-01",
+                                 url="https://mp.weixin.qq.com/s/AI4S2", quiet=True)
+        check("ai4s 显式传 url 才更新",
+              d9["ai4s"]["posts"][0]["url"].endswith("AI4S2") and any("url" in c for c in ch9),
+              repr(ch9))
+        check("ai4s 同仓库不重复", len(d9["ai4s"]["posts"]) == 1, repr(d9["ai4s"]["posts"]))
+
+        # 派生 date（post.md 修改日）不得覆盖已有的发布日（补链接再跑一次是常规操作）
+        d9b = json.loads(path.read_text(encoding="utf-8"))
+        d9b["ai4s"]["posts"][0]["date"] = "2026-10-05"
+        path.write_text(_dump(d9b), encoding="utf-8")
+        d9c, _ = sync_ai4s_post(path, post_dir, quiet=True)
+        check("ai4s 补链接重跑不把发布日改回生成日",
+              d9c["ai4s"]["posts"][0]["date"] == "2026-10-05",
+              repr(d9c["ai4s"]["posts"][0]["date"]))
+        d9d, _ = sync_ai4s_post(path, post_dir, date_override="2026-10-06", quiet=True)
+        check("ai4s 显式 --date 才更新日期",
+              d9d["ai4s"]["posts"][0]["date"] == "2026-10-06",
+              repr(d9d["ai4s"]["posts"][0]["date"]))
+
+        # meta.txt 兜底也要去 scheme（post.md 无结尾 GitHub 块时）
+        post_fb = Path(tmp) / "PubAI4S" / "fallback-repo"
+        (post_fb / "inputs").mkdir(parents=True)
+        (post_fb / "post.md").write_text("# Fallback · 无结尾链接\n", encoding="utf-8")
+        (post_fb / "inputs" / "meta.txt").write_text(
+            "仓库链接：https://github.com/fallback/repo\n", encoding="utf-8")
+        derived_fb, _ = derive_ai4s_meta(post_fb)
+        check("ai4s meta.txt 兜底 repo 去 scheme",
+              derived_fb["repo"] == "fallback/repo", repr(derived_fb["repo"]))
+
+        post2 = Path(tmp) / "PubAI4S" / "omicverse-omicverse"
+        post2.mkdir(parents=True)
+        (post2 / "post.md").write_text(
+            "# OmicVerse · 一站式分析平台\n\n"
+            "> GitHub：[github.com/omicverse/omicverse](https://github.com/omicverse/omicverse)\n",
+            encoding="utf-8")
+        d10, _ = sync_ai4s_post(path, post2, date_override="2026-10-02", quiet=True)
+        check("ai4s 第二条 no=2 且插头部", d10["ai4s"]["posts"][0]["no"] == 2,
+              repr(d10["ai4s"]["posts"][0]))
+        check("ai4s 已有条目保留",
+              any(p["repo"] == "google-deepmind/synthidbio" for p in d10["ai4s"]["posts"]))
+
+        snap = path.read_text(encoding="utf-8")
+        sync_ai4s_post(path, post2, dry_run=True, quiet=True)
+        check("ai4s dry-run 不写盘", path.read_text(encoding="utf-8") == snap)
+        try:
+            sync_ai4s_post(path, Path(tmp) / "nonexistent", quiet=True)
+            failures.append("ai4s 缺 post.md 应当报错")
+        except SiteSyncError:
+            pass
+
     if failures:
         print("sitejson selftest 失败：")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("sitejson selftest: 全部通过（派生回归/首次写入/幂等/wechat 归一/dry-run/非法输入）")
+    print("sitejson selftest: 全部通过（派生回归/首次写入/幂等/wechat 归一/dry-run/非法输入/AI4S 归档）")
     return 0

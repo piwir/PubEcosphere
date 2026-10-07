@@ -2,14 +2,20 @@
   "siteName": "PubEcosphere",
   "tagline": "PubPeer 学术诚信周报 · 每周三更新",
   "github": "https://github.com/piwir/PubEcosphere",
-  "currentIssue": 8,
-  "issueDate": "2026-09-30",
-  "window": "2026-09-21 – 2026-09-27",
+  "currentIssue": 9,
+  "issueDate": "2026-10-07",
+  "window": "2026-09-28 – 2026-10-04",
   "wechat": {
-    "url": "https://mp.weixin.qq.com/s/6VZ2eh0M7DcMJzvgGKpdbQ",
-    "label": "阅读第 8 期周报"
+    "url": "https://mp.weixin.qq.com/s/vwFWiRMmuTJ9XMTxtU0wAA",
+    "label": "阅读第 9 期周报"
   },
   "issues": [
+    {
+      "issue": 9,
+      "date": "2026-10-07",
+      "wechatUrl": "https://mp.weixin.qq.com/s/vwFWiRMmuTJ9XMTxtU0wAA",
+      "summary": "PubPeer 周报 · issue 9"
+    },
     {
       "issue": 8,
       "date": "2026-09-30",
@@ -62,6 +68,14 @@
   "ai4s": {
     "github": "https://github.com/piwir/PubAI4S",
     "posts": [
+      {
+        "no": 2,
+        "repo": "google-deepmind/synthidbio",
+        "name": "SynthID Bio",
+        "date": "2026-10-01",
+        "summary": "SynthID Bio · 为 AI 生成的蛋白质序列与结构嵌入保功能水印",
+        "url": "https://mp.weixin.qq.com/s/_c9GPjV4JC7Qj326SgItGg"
+      },
       {
         "no": 1,
         "repo": "omicverse/omicverse",

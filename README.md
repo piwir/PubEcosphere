@@ -91,10 +91,12 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 }
 ```
 
+Pi 客户端直接用**内置 MCP**（无需第三方 adapter）：把上面这段放进项目 `.pi/mcp.json`（或用户级 `~/.pi/agent/mcp.json`），首次使用需信任项目（`/trust`）；可选 `exposure: "codemode"` + `toolExposure` 指定哪些工具直接暴露给模型。
+
 **Subagent 挂载**：把对应文件内容作为 subagent 的系统提示词加载，工作目录指向仓库根，授予 Bash / Read / Write / Edit / Glob / Grep 权限：
 
 - `src/agent/pubecosphere-weekly.md` — 周报全流程：status 查询 → rank 打分 → pick 选稿（先 dry-run 等人工确认）→ 图材 → 写稿 → 排版渲染；
-- `src/agent/pubai4s-post.md` — AI4S 项目推文：fetch 抓取 → 材料提取 → 写稿 → 渲染 base64 成品。
+- `src/agent/pubai4s-post.md` — AI4S 项目推文：fetch 抓取 → 材料提取 → 写稿 → 渲染 base64 成品 → 官网归档。
 
 **使用建议**：agent 起步先 `status` 自查，`pick` 先 dry-run 给人工批准，草稿生成后人工审核再发布。工具清单与两形态分工详见 [agent/README.md](src/agent/README.md)。
 
@@ -107,6 +109,10 @@ https://piwir.github.io/PubEcosphere/ （Vue 3 + Vite，GitHub Actions 自动部
 1. `currentIssue` / `issueDate` / `window` → 新一期（自动写入）；
 2. `issues` 数组头部加一条 `{ "issue": N, "date": "YYYY-MM-DD", "wechatUrl": "…", "summary": "一句话摘要" }`（自动写入，`wechatUrl` 留空）；
 3. 发布后在 `issues[]` 条目里补 `wechatUrl` → `python -m sitejson sync --issue N` 同步 `wechat.url` / `wechat.label`（链接未发布时首页显示「即将发布」占位）。
+
+**AI4S 推文归档**（官网 AI4S 页）同理，但走单独命令，只动 `ai4s.posts`：推文渲染后跑
+`python -m sitejson sync-ai4s --dir output/PubAI4S/<owner>-<repo>`（`repo` / 项目名 / 摘要 / 日期从 `post.md` 派生，按 repo 去重、幂等）；
+发布后在 `ai4s.posts[].url` 补公众号链接再跑一次，页面即由「即将发布」变为可点阅读。
 
 本地开发与换图说明见 [site/README.md](src/site/README.md)。
 

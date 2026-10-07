@@ -129,6 +129,25 @@ class ScoringStore:
             f"SELECT pubpeer_id, doi FROM doi_resolution WHERE pubpeer_id IN ({q})", pubpeer_ids)
         return {r["pubpeer_id"]: r["doi"] for r in _rows(cur) if r["doi"]}
 
+    def doi_resolution_for(self, pubpeer_ids: list[str]) -> dict[str, dict]:
+        """返回全部 doi_resolution 行（含 doi 为空的失败记录），供「失败 N 天内不重试」判定。
+
+        与 doi_for 的区别：doi_for 只回非空 DOI（调用方据此判断「是否已解析成功」），
+        本方法保留 doi=NULL 的失败行及 resolved_at，调用方才能对永久 miss 做退避，
+        避免每天对同一批解析不到 DOI 的文章重复打 CrossRef。
+        """
+        out: dict[str, dict] = {}
+        ids = list(pubpeer_ids)
+        for i in range(0, len(ids), 500):    # 分批，避开 SQLite 变量数上限
+            chunk = ids[i:i + 500]
+            q = ",".join("?" * len(chunk))
+            cur = self.conn.execute(
+                f"SELECT pubpeer_id, doi, resolved_at FROM doi_resolution "
+                f"WHERE pubpeer_id IN ({q})", chunk)
+            for r in _rows(cur):
+                out[r["pubpeer_id"]] = r
+        return out
+
     # ---- v3_feedback ------------------------------------------------------
 
     def upsert_v3_feedback(self, feedback: dict) -> None:

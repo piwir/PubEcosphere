@@ -23,9 +23,20 @@ Vue 3 + Vite + vue-router（hash 路由），无 UI 库、手写 CSS。构建产
 
 ## AI4S 页更新
 
-推文发布后编辑 `src/data/site.json` 的 `ai4s` 字段：`posts` 数组头部加一条
-`{ "no": N, "repo": "owner/repo", "name": "项目名", "date": "YYYY-MM-DD", "summary": "一句话摘要", "url": "公众号链接" }`；
-未发布的推文 `url` 留空（页面显示「即将发布」）。
+推文渲染完成后跑一条命令即可（幂等，可重跑）：
+
+```bash
+python -m sitejson sync-ai4s --dir output/PubAI4S/<owner>-<repo>
+```
+
+它只动 `src/data/site.json` 的 `ai4s.posts`（周报字段一概不动），按 `repo` 去重、不覆盖已有链接；
+`repo` / `name` / `summary` / `date` 从产物目录的 `post.md` 与 `inputs/meta.txt` 派生
+（`summary` 取主标题，`date` 取 `post.md` 修改日；发布日不同时加 `--date YYYY-MM-DD`）。
+未发布的推文 `url` 留空（页面显示「即将发布」）——**`ai4s.posts[].url` 是公众号链接的唯一人工填写处**：
+发布后填上链接再跑一次同一条命令即可（也可重跑时传 `--url`）。
+`--dry-run` 只看将发生的变化不写盘；`python -m sitejson --selftest` 含 AI4S 归档的离线用例。
+需要手工加条目时，可直接编辑 `ai4s.posts` 数组头部插入
+`{ "no": N, "repo": "owner/repo", "name": "项目名", "date": "YYYY-MM-DD", "summary": "一句话摘要", "url": "公众号链接" }`。
 
 **隐私**：site.json 随仓库公开——只放期号/日期/窗口/链接/中性摘要，
 不放周报正文、pubpeer id、打假人姓名。归档摘要为固定文案 `PubPeer 周报 · issue N`，

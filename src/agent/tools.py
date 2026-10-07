@@ -226,6 +226,15 @@ def _run_issue(args: dict) -> CmdSpec:
 
 
 def _site_sync(args: dict) -> CmdSpec:
+    """官网归档：两种模式二选一——周报（issue）或 AI4S 推文（out_dir）。"""
+    if args.get("out_dir"):
+        argv = [PY, "-m", "sitejson", "sync-ai4s",
+                "--dir", str(_output_path(args["out_dir"]))]
+        if args.get("dry_run"):
+            argv.append("--dry-run")
+        return CmdSpec(argv)
+    if not args.get("issue"):
+        raise ValueError("site_sync 需要 issue（周报归档）或 out_dir（AI4S 推文归档）之一")
     n = _issue(args["issue"])
     if n == "-1":
         raise ValueError("site.json 归档只支持正整数期号（-1 测试期不写站点数据）")
@@ -405,12 +414,16 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
         _run_issue),
     ToolDef(
         "site_sync",
-        "官网归档（幂等）：把本期期号/日期/素材窗口/归档条目写进 "
-        "src/site/src/data/site.json（公众号链接除外——发布后在 issues[].wechatUrl 补链接再跑一次即同步首页 CTA）。"
-        "不 commit、不 push；-1 测试期不支持。",
-        _schema({"issue": {"type": "string", "description": "正整数期号（-1 不支持）"},
-                 "dry_run": {"type": "boolean", "description": "只打印将写入的变化，不改文件"}},
-                required=["issue"]),
+        "官网归档（幂等，不 commit/push）：两种模式二选一——"
+        "①周报：issue=<正整数期号>，把期号/日期/素材窗口/归档条目写进 src/site/src/data/site.json"
+        "（发布后在 issues[].wechatUrl 补链接再跑一次即同步首页 CTA；-1 测试期不支持）；"
+        "②AI4S 推文：out_dir=output/PubAI4S/<owner>-<repo>，把该篇写进 site.json 的 ai4s.posts"
+        "（只动 ai4s，repo/项目名/摘要/日期从 post.md 派生；发布后在 ai4s.posts[].url 补公众号链接"
+        "再跑一次，AI4S 页即由「即将发布」变为可点阅读）。",
+        _schema({"issue": {"type": "string", "description": "周报模式：正整数期号（-1 不支持）"},
+                 "out_dir": {"type": "string",
+                             "description": "AI4S 模式：PubAI4S 产物目录（output/ 内相对路径）"},
+                 "dry_run": {"type": "boolean", "description": "只打印将写入的变化，不改文件"}}),
         _site_sync),
     # ---- pubai4s（子模块推文流水线）----
     ToolDef(

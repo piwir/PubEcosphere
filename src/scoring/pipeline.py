@@ -121,6 +121,22 @@ def _in_date_range(field_value: str | None, start_iso: str, end_iso: str) -> boo
     return lo <= dt < hi
 
 
+def _not_before(iso: str | None, cutoff: datetime) -> bool:
+    """iso 时间是否处于 cutoff 之后（cutoff 为 aware UTC）。
+
+    无法解析或为空 → False（当作可重试，不因脏数据永久跳过）。
+    """
+    if not iso:
+        return False
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt >= cutoff
+
+
 def _make_shortlist(results: list[dict], k: int) -> list[dict]:
     """每分类（大类或小类）按 stage1(final) 取 top-k。"""
     by_cat: dict[str, list[dict]] = {}
@@ -133,20 +149,38 @@ def _make_shortlist(results: list[dict], k: int) -> list[dict]:
 
 
 def _run_enrich(client, sstore, caps: list[dict], pub_doi_map: dict[str, str],
-                cfg, args, limit: int | None = None) -> tuple[list[str], int, int]:
+                cfg, args, limit: int | None = None,
+                doi_retry_days: int = 0) -> tuple[list[str], int, int]:
     """DOI 解析 + v3 预热（TTL 缓存）。返回 (dois, n_resolved, n_v3)。
 
     caps 已由调用方过滤（rank 只传窗口内文章）；limit 先截取 caps 再算 pending（enrich 子命令用）。
+    doi_retry_days > 0 时，对「已尝试但没拿到 DOI」的文章在窗口内不再重试（每日 enrich 用；
+    rank 传 0，窗口内文章始终重试，保证当周 DOI 尽量补齐）。
     """
     if limit:
         caps = caps[:limit]
-    cached_dois = sstore.doi_for([c["pubpeer_id"] for c in caps])
-    dois: list[str] = [d for d in cached_dois.values() if d]
+    pids = [c["pubpeer_id"] for c in caps]
+    rows = sstore.doi_resolution_for(pids)
+    cached_dois = {pid: r["doi"] for pid, r in rows.items() if r.get("doi")}
+    dois: list[str] = list(cached_dois.values())
     n_resolved = 0
-    pending = [c for c in caps
-               if args.refresh_enrich or c["pubpeer_id"] not in cached_dois]
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=doi_retry_days)
+              if doi_retry_days else None)
+    pending: list[dict] = []
+    skipped = 0
+    for cap in caps:
+        pid = cap["pubpeer_id"]
+        if args.refresh_enrich or pid not in rows:
+            pending.append(cap)                       # 从未尝试 / 强制刷新
+        elif pid in cached_dois:
+            continue                                  # 已解析成功
+        elif cutoff is not None and _not_before(rows[pid].get("resolved_at"), cutoff):
+            skipped += 1                              # 失败退避窗口内
+        else:
+            pending.append(cap)
     if args.verbose:
-        print(f"resolve DOI: {len(pending)} pending (parallel ×{args.enrich_workers}, "
+        extra = f"（含 {doi_retry_days} 天内不重试 {skipped} 条）" if doi_retry_days else ""
+        print(f"resolve DOI: {len(pending)} pending{extra} (parallel ×{args.enrich_workers}, "
               f"delay {args.delay}s)", flush=True)
     with ThreadPoolExecutor(max_workers=args.enrich_workers) as ex:
         futs = [ex.submit(_resolve_doi_worker, cap, pub_doi_map, args.delay) for cap in pending]
@@ -264,7 +298,8 @@ def cmd_enrich(args) -> int:
     pub_doi_map = {p["pubpeer_id"]: p.get("doi") for p in pubs if p.get("doi")}
     try:
         dois, n_resolved, n_v3 = _run_enrich(client, sstore, captures, pub_doi_map, cfg, args,
-                                             limit=args.limit)
+                                             limit=args.limit,
+                                             doi_retry_days=args.doi_retry_days)
     except Exception as exc:            # noqa: BLE001 —— 读写中途失败也透出真实原因
         print(f"enrich 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         traceback.print_exc()
@@ -486,6 +521,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("enrich", parents=[common],
                        help="每日预热：CrossRef DOI 解析 + v3 拉取（TTL 2 天缓存；rank 时窗口内自动命中）")
     p.add_argument("--limit", type=_non_neg_int, default=None, help="本轮最多处理前 N 条捕获（默认全部；测试用）")
+    p.add_argument("--doi-retry-days", type=_non_neg_int, default=7,
+                   help="DOI 解析失败后退避天数（默认 7；窗口内不再重试，避免每天重复打 CrossRef；0 = 每天重试）")
     p.add_argument("--refresh-enrich", action="store_true", help="强制刷新 DOI/v3 缓存")
     p.set_defaults(func=cmd_enrich)
 

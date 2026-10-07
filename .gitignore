@@ -18,6 +18,7 @@ node_modules/
 .bun*/
 .npm*/
 .mcp*
+.pi/mcp.json
 *.env
 .env*
 !.env.example

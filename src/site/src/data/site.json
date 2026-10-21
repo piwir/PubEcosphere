@@ -2,14 +2,20 @@
   "siteName": "PubEcosphere",
   "tagline": "PubPeer 学术诚信周报 · 每周三更新",
   "github": "https://github.com/piwir/PubEcosphere",
-  "currentIssue": 10,
-  "issueDate": "2026-10-14",
-  "window": "2026-10-05 – 2026-10-11",
+  "currentIssue": 11,
+  "issueDate": "2026-10-21",
+  "window": "2026-10-12 – 2026-10-18",
   "wechat": {
-    "url": "https://mp.weixin.qq.com/s/O9UEuN0Q6mw4-Oxg33QTqA",
-    "label": "阅读第 10 期周报"
+    "url": "https://mp.weixin.qq.com/s/6JmIW_Y9z4KK6JJjGCRoDA",
+    "label": "阅读第 11 期周报"
   },
   "issues": [
+    {
+      "issue": 11,
+      "date": "2026-10-21",
+      "wechatUrl": "https://mp.weixin.qq.com/s/6JmIW_Y9z4KK6JJjGCRoDA",
+      "summary": "PubPeer 周报 · issue 11"
+    },
     {
       "issue": 10,
       "date": "2026-10-14",

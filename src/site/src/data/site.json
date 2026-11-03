@@ -2,14 +2,20 @@
   "siteName": "PubEcosphere",
   "tagline": "PubPeer 学术诚信周报 · 每周三更新",
   "github": "https://github.com/piwir/PubEcosphere",
-  "currentIssue": 11,
-  "issueDate": "2026-10-21",
-  "window": "2026-10-12 – 2026-10-18",
+  "currentIssue": 12,
+  "issueDate": "2026-10-28",
+  "window": "2026-10-19 – 2026-10-25",
   "wechat": {
-    "url": "https://mp.weixin.qq.com/s/6JmIW_Y9z4KK6JJjGCRoDA",
-    "label": "阅读第 11 期周报"
+    "url": "https://mp.weixin.qq.com/s/zQYUqLSA7rC8YlBTy5XgOQ",
+    "label": "阅读第 12 期周报"
   },
   "issues": [
+    {
+      "issue": 12,
+      "date": "2026-10-28",
+      "wechatUrl": "https://mp.weixin.qq.com/s/zQYUqLSA7rC8YlBTy5XgOQ",
+      "summary": "PubPeer 周报 · issue 12"
+    },
     {
       "issue": 11,
       "date": "2026-10-21",
@@ -80,6 +86,14 @@
   "ai4s": {
     "github": "https://github.com/piwir/PubAI4S",
     "posts": [
+      {
+        "no": 3,
+        "repo": "RosettaCommons/chaperone",
+        "name": "Chaperone",
+        "date": "2026-10-22",
+        "summary": "Chaperone · 让结构生物学工具变成可串联的 block",
+        "url": ""
+      },
       {
         "no": 2,
         "repo": "google-deepmind/synthidbio",

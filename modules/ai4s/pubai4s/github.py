@@ -1,6 +1,6 @@
 """GitHub REST + 网页抓取（纯 stdlib urllib）：仓库元数据、README 原文、官网文本与图片。
 
-限速与重试复刻 src/crawler/client.py 的模式：瞬时错误退避重试；
+限速与重试复刻 modules/weekly/crawler/client.py 的模式：瞬时错误退避重试；
 未认证 API 60 req/h，403/429 时给出提示。404 → RepoNotFoundError。
 """
 from __future__ import annotations

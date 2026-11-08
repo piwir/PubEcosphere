@@ -5,7 +5,7 @@
   相关评论正文），模型无读图能力、绝不臆测图内看不到的内容。
 - 阶段B：归集的 stageA_combined.md → 写稿提示词（prompt_weekly_writer）→ 整期周报草稿。
 
-命令：`python -m llm generate --material-dir … --weekly-dir … --issue -1`（--dry-run 只打印消息）。
+命令：`python -m writer generate --material-dir … --weekly-dir … --issue -1`（--dry-run 只打印消息）。
 """
 from __future__ import annotations
 

@@ -13,7 +13,7 @@
 选择器可命中，juice 又不支持 `:has()`；且微信只保留内联 style → 直接给该 <p> 注入
 内联样式（幂等：先清掉已有 font-size/line-height 再加新值）。
 
-用法：python -m llm.polish_html <input.html> [--out <output.html>]
+用法：python -m writer.polish_html <input.html> [--out <output.html>]
 默认原地写回。
 """
 from __future__ import annotations

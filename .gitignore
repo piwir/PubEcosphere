@@ -31,7 +31,6 @@ data/pubpeer.db.bak-*
 *.db-shm
 output/
 
-# docs
+# docs（私有；提示词已随模块放在 modules/weekly/prompts 与 modules/ai4s/prompts）
 docs/*
 AGENTS.md
-!docs/prompts/

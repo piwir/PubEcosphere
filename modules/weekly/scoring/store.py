@@ -74,14 +74,22 @@ def _rows(cur) -> list[dict]:
 
 
 class ScoringStore:
-    """打分模块存储：自有表 + 对爬虫表（captures/publications/comments）的只读访问。"""
+    """打分模块存储：自有表 + 对爬虫表（captures/publications/comments）的只读访问。
 
-    def __init__(self, path: str | Path):
+    `create=False`（默认是**只读探测**）时不建库、不建表：库文件不存在直接抛
+    `core.db.MissingTable`。`coverage`/`status` 这类只读命令用默认值，agent 误传路径
+    时拿到一句人话而不是「静默多出一个空库」；`rank`/`pick`/`enrich` 这类真写库的
+    命令显式传 `create=True`。
+    """
+
+    def __init__(self, path: str | Path, create: bool = False):
         self.path = str(path)
-        # 连接参数统一走 core.db（30s 超时 + busy_timeout，与 crawler.store 一致）
-        self.conn = core_db.connect(self.path)
-        self.conn.executescript(SCHEMA)
-        self._migrate()
+        # 连接参数统一走 core.db（30s 超时 + busy_timeout，与 crawler.store 一致）；
+        # create=False 走只读连接，库文件不存在抛 MissingTable（绝不静默建空库）
+        self.conn = core_db.connect(self.path) if create else core_db.connect_ro(self.path)
+        if create:
+            self.conn.executescript(SCHEMA)
+            self._migrate()
 
     def _migrate(self) -> None:
         """旧库升级：scores 缺 minor_partition 列时补上。"""
@@ -243,22 +251,31 @@ class ScoringStore:
                 rows)
 
     # ---- 爬虫表只读访问（不建表、不改动） ---------------------------------
+    # 读之前统一 require_tables：库是空的（没跑过 capture）时给一句人话，
+    # 而不是让 agent 面对 sqlite3.OperationalError: no such table 的堆栈。
+
+    def _require(self, *tables: str) -> None:
+        core_db.require_tables(self.conn, *tables, path=self.path)
 
     def all_captures(self) -> list[dict]:
+        self._require("captures")
         cur = self.conn.execute("SELECT * FROM captures ORDER BY captured_at DESC")
         return _rows(cur)
 
     def all_publications(self) -> list[dict]:
+        self._require("publications")
         cur = self.conn.execute("SELECT * FROM publications")
         return _rows(cur)
 
     def all_comments(self) -> list[dict]:
+        self._require("comments")
         cur = self.conn.execute("SELECT * FROM comments")
         return _rows(cur)
 
     def publications_for(self, pubpeer_ids: list[str]) -> dict[str, dict]:
         if not pubpeer_ids:
             return {}
+        self._require("publications")
         q = ",".join("?" * len(pubpeer_ids))
         cur = self.conn.execute(
             f"SELECT * FROM publications WHERE pubpeer_id IN ({q})", pubpeer_ids)
@@ -267,6 +284,7 @@ class ScoringStore:
     def comments_for(self, pubpeer_ids: list[str]) -> dict[str, list[dict]]:
         if not pubpeer_ids:
             return {}
+        self._require("comments")
         q = ",".join("?" * len(pubpeer_ids))
         cur = self.conn.execute(
             f"SELECT * FROM comments WHERE pubpeer_id IN ({q}) ORDER BY accepted_at", pubpeer_ids)

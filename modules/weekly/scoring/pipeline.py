@@ -20,6 +20,7 @@ from pathlib import Path
 from crawler.client import ClientConfig, PubPeerClient
 from crawler.store import Store as CrawlerStore
 
+from core import db as core_db
 from core.time import iso_now as _iso_now  # 全仓统一时间口径（core.time）
 
 from . import config as config_mod
@@ -251,9 +252,14 @@ def cmd_status(args) -> int:
 # ---- coverage -------------------------------------------------------------
 
 def cmd_coverage(args) -> int:
+    """期刊覆盖率（只读、不联网）：库缺失时干净退出 1，不建空库。"""
     cas_idx, jcr_idx, ccf_idx = _build_indexes(args)
-    sstore = ScoringStore(args.db)
-    captures = sstore.all_captures()
+    try:
+        sstore = ScoringStore(args.db)          # 只读探测
+        captures = sstore.all_captures()
+    except core_db.MissingTable as exc:
+        print(f"coverage: {exc}", file=sys.stderr)
+        return 1
     cov = _coverage_rows(cas_idx, jcr_idx, ccf_idx, captures)
 
     out_dir = _score_root(args)
@@ -287,7 +293,7 @@ def cmd_enrich(args) -> int:
     """
     try:
         cfg = config_mod.ScoringConfig()
-        sstore = ScoringStore(args.db)
+        sstore = ScoringStore(args.db, create=True)   # enrich 要写 doi_resolution/v3
         client = PubPeerClient(ClientConfig(delay=args.delay))
     except Exception as exc:            # noqa: BLE001 —— 如 database is locked / 无法打开库
         print(f"enrich: 打开数据库失败：{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -318,7 +324,7 @@ def cmd_enrich(args) -> int:
 def cmd_rank(args) -> int:
     cfg = config_mod.ScoringConfig()
     cas_idx, jcr_idx, ccf_idx = _build_indexes(args)
-    sstore = ScoringStore(args.db)
+    sstore = ScoringStore(args.db, create=True)   # rank 要写 scores/shortlist
     cstore = CrawlerStore(args.db)
     captures = sstore.all_captures()
     if not args.include_published:
@@ -461,7 +467,7 @@ def cmd_pick(args) -> int:
     if args.max_total is not None:
         cfg.max_picks_total = args.max_total
 
-    sstore = ScoringStore(args.db)
+    sstore = ScoringStore(args.db, create=True)   # pick 要写 published
     run_id = args.run_id or sstore.latest_run_id()
     if not run_id:
         print("no run found — 先运行 rank", file=sys.stderr)

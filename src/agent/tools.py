@@ -465,6 +465,15 @@ _PREFLIGHT_CHECKS: list[tuple[list[str], str]] = [
     ([PY, "-m", "writer", "selftest"], "离线自测"),
     ([PY, "-m", "llm", "md2html", "--check"], "md2html 就绪（bun+render.ts+node_modules）"),
     ([PY, "-m", "scoring.pipeline", "status", "--json"], "status 只读可跑"),
+    # 只读检查：不用 coverage（它会往 output/score/ 写报告，自检不应有副作用）；
+    # 自己捕 MissingTable 打一行结论，别把 traceback 甩给调用方。
+    ([PY, "-c",
+      "from core.db import MissingTable;from scoring.store import ScoringStore\n"
+      "try:\n"
+      f"    ScoringStore({DB_DEFAULT!r}).all_captures();print('captures readable')\n"
+      "except MissingTable as e:\n"
+      "    print(f'库不可读：{e}');raise SystemExit(1)"],
+     "库可读（captures 表存在；缺库会干净失败）"),
 ]
 
 

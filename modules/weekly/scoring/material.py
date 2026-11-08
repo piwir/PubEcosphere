@@ -520,6 +520,16 @@ def main(argv: list[str] | None = None) -> int:
     issue_dir = Path(args.issue_dir) if args.issue_dir else Path(args.pub_dir).parent
     issue = issue_dir.name
     pub_dir = Path(args.pub_dir)
+    # 输入校验前置：目录不存在 / 没跑过 pick 时给一句人话，别让下游写 index.md 时抛
+    # FileNotFoundError（agent 拿到的堆栈里看不出「该先跑 pick」）。
+    if not pub_dir.is_dir():
+        print(f"material: 素材目录不存在：{pub_dir}（先跑 `python -m scoring.pipeline pick`）",
+              file=sys.stderr)
+        return 1
+    if not any(pub_dir.glob("*_files/*.md")):
+        print(f"material: {pub_dir} 下没有 <pid>_files/<pid>.md（先跑 pick 下载素材）",
+              file=sys.stderr)
+        return 1
 
     # 写回模式：合并图与结构化 md 直接写进 pub/<pid>_files/，无需清场（pick 清 pub/ 兜底）
 

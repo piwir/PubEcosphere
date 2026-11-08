@@ -99,7 +99,19 @@ Pi 客户端直接用**内置 MCP**（无需第三方 adapter）：把上面这�
 - `src/agent/pubecosphere-weekly.md` — 周报全流程：status 查询 → rank 打分 → pick 选稿（先 dry-run 等人工确认）→ 图材 → 写稿 → 排版渲染；
 - `src/agent/pubai4s-post.md` — AI4S 项目推文：fetch 抓取 → 材料提取 → 写稿 → 渲染 base64 成品 → 官网归档。
 
-**使用建议**：agent 起步先 `status` 自查，`pick` 先 dry-run 给人工批准，草稿生成后人工审核再发布。工具清单与两形态分工详见 [agent/README.md](src/agent/README.md)。
+**agent 上手路径**（三步，不用先读完全文）：
+
+```bash
+# 1) 自检：提示词 / 离线自测 / 转换器 / 状态机 / 数据库可读，五项全 PASS
+python -c "from agent.tools import run_tool; print(run_tool('preflight', {}).text)"
+
+# 2) 问状态机：当前走到哪、下一步该跑什么命令（next_cmd 可直接复制执行）
+python -m scoring.pipeline status --db data/pubpeer.db --issue <N>
+
+# 3) 按 next_cmd 走，跑完再问一次 status，next_cmd 自动前移
+```
+
+`pick` 先 dry-run 给人工批准，草稿生成后人工审核再发布。只读命令（`status` / `coverage`）在库缺失时干净退出 1 并给一行原因，**不会静默建出空库**。工具清单与两形态分工详见 [agent/README.md](src/agent/README.md)。
 
 ## 网站
 

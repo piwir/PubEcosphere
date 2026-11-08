@@ -126,20 +126,31 @@ def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
     }
 
     # 下一步推导（generate --assemble 同时产生 drafted + assembled，两者一起判）
+    # next_cmd 是可直接复制执行的那条命令（agent 不必再去翻文档拼参数）。
     if not stages["ranked"]:
-        next_step = "rank（打分）"
+        step, cmd = "rank（打分）", f"python -m scoring.pipeline rank --db {{db}} --issue {issue} --window-field captured_at"
     elif not stages["picked"]:
-        next_step = "pick（选稿，先 dry-run 预览给人工批准）"
+        step, cmd = ("pick（选稿，先 dry-run 预览给人工批准）",
+                     f"python -m scoring.pipeline pick --db {{db}} --issue {issue} --min-score 0.50 --max-total 10 --dry-run")
     elif not stages["materialized"]:
-        next_step = "material（图材合并，写回 pub/<pid>_files/）"
+        step, cmd = ("material（图材合并，写回 pub/<pid>_files/）",
+                     f"python -m scoring.material --pub-dir {issue_dir}/pub")
     elif not (stages["drafted"] and stages["assembled"]):
-        next_step = "generate --assemble（写稿+排版，需 API key；草稿需人工审）"
+        step, cmd = ("写稿（本机首选：agent 按 modules/weekly/prompts/ 自己写）或 "
+                     "writer generate（走 API，无头/定时用）",
+                     f"python -m writer generate --material-dir {issue_dir}/pub "
+                     f"--weekly-dir {issue_dir}/weekly --issue {issue} --assemble")
     elif not stages["html"]:
-        next_step = "md2html（md → html）"
+        step, cmd = "md2html（md → html）", f"python -m llm md2html {issue_dir}/weekly/{issue}.md --theme default --keep-title"
     elif not stages["base64"]:
-        next_step = "polish_html + inline_images（base64 内联）"
+        step, cmd = ("polish_html + inline_images（base64 内联）",
+                     f"python -m writer.polish_html {issue_dir}/weekly/{issue}.html && "
+                     f"python -m llm.inline_images {issue_dir}/weekly/{issue}.html")
     else:
-        next_step = "ready_to_publish（人工浏览器复制粘贴推送）"
+        step, cmd = ("ready_to_publish（人工浏览器复制粘贴推送；发布后把链接填进 "
+                     "site.json 的 issues[].wechatUrl 再跑 sitejson sync）",
+                     f"python -m sitejson sync --issue {issue}")
+    next_step, next_cmd = step, cmd.replace("{db}", db) if "{db}" in cmd else cmd
 
     return {
         "issue": issue,
@@ -148,6 +159,7 @@ def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
         "manifest": manifest,
         "stage": stages,
         "next_step": next_step,
+        "next_cmd": next_cmd,
         "published_in_issue": _published_in_issue(db, issue),
     }
 
@@ -181,7 +193,10 @@ def collect_status(db: str, issue: str | None = None, output_root: str = "output
         "issues": issues,
         "next_step": ("指定 --issue <n> 查看具体到哪一步" if not issue
                       else (issues[0]["next_step"] if issues
-                            else "该期还没有目录（数据由长期 cron 爬虫供给；直接 rank 打分）")),
+                            else "该期还没有目录（先跑 rank 打分；数据由本地爬虫供给）")),
+        "next_cmd": (None if issue is None
+                     else (issues[0].get("next_cmd") if issues
+                           else f"python -m scoring.pipeline rank --db {db} --issue {issue} --window-field captured_at")),
     }
 
 
@@ -192,6 +207,7 @@ def _fmt_issue(s: dict) -> str:
         f"    manifest: {s['manifest'] if s['manifest'] else '（无）'}",
         f"    published_in_issue: {s['published_in_issue']}",
         f"    next: {s['next_step']}",
+        f"    next_cmd: {s.get('next_cmd', '-')}",
     ]
     return "\n".join(lines)
 

@@ -1,8 +1,8 @@
 """官网归档：把当期信息写进 `src/site/src/data/site.json`（公众号链接除外）。
 
 设计：
-- 周报（sync）：派生规则单一锚点 `WEEK_START`（第 1 期数据收集起始日，默认 2026-08-03，与
-  `run_issue.sh` / `llm.generate` / `agent.tools` 同算法）——
+- 周报（sync）：派生规则单一锚点 `WEEK_START`（第 1 期数据收集起始日，默认 2026-08-03），
+  实现只在 `core.issue`（run_issue.sh / rank / 写稿 / agent 工具共用同一份）——
   窗口 = [start, start+6]，发布日 = start+9（周三）；
   `issues[].wechatUrl` 是公众号链接的唯一人工填写处，`wechat.url/label` 每次 sync 都由它重算。
 - AI4S 推文（sync-ai4s）：从 PubAI4S 产物目录派生条目写进 `ai4s.posts`，

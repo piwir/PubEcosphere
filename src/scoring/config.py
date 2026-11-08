@@ -1,10 +1,13 @@
 """打分系统配置：权重、基线、打假人名单、类别、窗口、数据文件路径。
 
 所有可调参数集中在此，调权重视图不改打分逻辑。
+打假人名单本身在 `core.names.SLEUTHS`（唯一来源、跨模块共用），此处只做引用。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from core.names import SLEUTHS
 
 # 报告窗口（周报取 [now-10d, now-3d]，与 README 一致）
 WINDOW_DAYS: tuple[int, int] = (10, 3)
@@ -61,10 +64,8 @@ class ScoringConfig:
     category_interest: dict = field(default_factory=dict)
 
     # ---- 知名打假人精确别名（真名 + 公认证实马甲，小写归一、精确匹配） ----
-    sleuths: tuple = (
-        "elisabeth m bik", "hoya camphorifolia", "sholto david",
-        "leonid schneider", "matthew schrag", "david sanders", "clare francis",
-    )
+    # 唯一来源：core.names.SLEUTHS（改名单只改那里，不要在此重定义）
+    sleuths: tuple = SLEUTHS
 
     # ---- 撤稿/关注声明关键词（评论 markdown 子串匹配，小写） ----
     retraction_markers: tuple = (

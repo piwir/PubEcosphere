@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from core.display import impact_display
+
 _MAJOR_ALIAS = {
     "综合性期刊": "综合", "医学": "医学", "生物学": "生物学", "计算机科学": "计算机科学",
     "材料科学": "材料科学", "化学": "化学", "环境科学与生态学": "环境", "工程技术": "工程技术",
@@ -15,13 +17,8 @@ _MAJOR_ALIAS = {
 
 
 def _impact_display(r: dict) -> str:
-    if r.get("impact_factor"):
-        return f"IF {r['impact_factor']:.1f}"
-    if r.get("partition"):
-        return f"{r['partition']}区{'·Top' if r.get('top') else ''}"
-    if r.get("ccf_grade"):
-        return f"CCF {r['ccf_grade']}"
-    return "-"
+    """期刊影响力展示（唯一实现在 core.display.impact_display）。"""
+    return impact_display(r)
 
 
 def _breakdown_lines(r: dict) -> list[str]:

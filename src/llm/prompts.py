@@ -1,28 +1,21 @@
-"""提示词单一来源：从 docs/prompts/ 加载两阶段提示词（文本提取 + 写稿）并校验八节齐全。
+"""提示词加载与校验：周报两份提示词（阶段A 文本提取 + 阶段B 写稿）。
 
-八节骨架沿用 docs/prompt_example.txt：角色设定 / 背景 / 任务目标 /
-内容结构要求 / 术语定义规范 / 数字与科学计数法格式规范 / 输出格式 / 语气风格。
+八节骨架来自 `core.prompts.SECTIONS`（与推文流水线共用同一套约定，勿在此重定义）。
+提示词文件默认在 `docs/prompts/`（P2 起迁到 `modules/weekly/prompts/`），
+可用 `PUBECOSPHERE_LLM_PROMPT_DIR` 或显式参数覆盖。
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+from core.prompts import SECTIONS, check_prompts, missing_sections  # noqa: F401 —— 向后兼容再导出
+
 from .config import PROMPT_DIR_DEFAULT
 
 PROMPT_FILES = {
     "extract_text": "prompt_extract_text.md",  # 阶段A 文本提取
-    "writer": "prompt_weekly_writer.md",    # 阶段B 周报写稿
+    "writer": "prompt_weekly_writer.md",       # 阶段B 周报写稿
 }
-SECTIONS = [
-    "【角色设定】",
-    "【背景】",
-    "【任务目标】",
-    "【内容结构要求】",
-    "【术语定义规范】",
-    "【数字与科学计数法格式规范】",
-    "【输出格式】",
-    "【语气风格】",
-]
 
 
 def load_prompt(name: str, prompt_dir: str | Path | None = None) -> str:
@@ -35,14 +28,4 @@ def load_prompt(name: str, prompt_dir: str | Path | None = None) -> str:
 
 def validate_prompt_schema(prompt_dir: str | Path | None = None) -> list[str]:
     """校验两个提示词文件存在且八节齐全。返回问题列表，[] 表示通过。"""
-    problems: list[str] = []
-    for name in PROMPT_FILES:
-        path = Path(prompt_dir or PROMPT_DIR_DEFAULT) / PROMPT_FILES[name]
-        if not path.exists():
-            problems.append(f"{path.name}（文件不存在）")
-            continue
-        text = path.read_text(encoding="utf-8")
-        absent = [s for s in SECTIONS if s not in text]
-        if absent:
-            problems.append(f"{path.name}（缺少节：{'、'.join(absent)}）")
-    return problems
+    return check_prompts(prompt_dir or PROMPT_DIR_DEFAULT, PROMPT_FILES)

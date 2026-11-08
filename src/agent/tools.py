@@ -13,15 +13,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Callable
+
+from core.issue import WEEK_START_DEFAULT, scoring_window
 
 from .runner import REPO_ROOT, RunResult, run_cli
 
 PY = "python"
 DB_DEFAULT = "data/pubpeer.db"
-WEEK_START_BASE = "2026-08-03"  # 第 1 期数据收集起始日（与 run_issue.sh 默认一致）
 
 
 # ---- 参数校验 ------------------------------------------------------------
@@ -61,12 +61,11 @@ def _issue_dir(n: str) -> str:
     return f"output/issue/{n}"
 
 
-def _window_dates_for_issue(n: str, base: str = WEEK_START_BASE) -> tuple[str, str]:
-    """期号 → 绝对窗口 [START, START+7d)（ISO 日期，起含止不含）。
+def _window_dates_for_issue(n: str, week_start: str | None = None) -> tuple[str, str]:
+    """期号 → 打分绝对窗口 [START, START+7d)（ISO 日期，起含止不含）。
 
-    与 run_issue.sh / llm.generate.weekly_date_range 同算法：START = base + (期号-1)*7。"""
-    start = date.fromisoformat(base) + timedelta(days=(int(n) - 1) * 7)
-    return start.isoformat(), (start + timedelta(days=7)).isoformat()
+    实现委托 `core.issue.scoring_window`（唯一锚点：START = WEEK_START + (期号-1)*7）。"""
+    return scoring_window(int(n), week_start)
 
 
 # ---- 各工具 --------------------------------------------------------------
@@ -176,9 +175,8 @@ def _generate(args: dict) -> CmdSpec:
         argv += ["--model", str(args["model"])]
     if args.get("dry_run"):
         argv.append("--dry-run")
-    # WEEK_START 注入：只传基准起始日，期号偏移由 generate 内部 weekly_date_range
-    # 按 (issue-1)*7 推算——与 run_issue.sh 同规则；勿在此再偏移（否则 --issue 2 起多 7 天）
-    ws = str(args["week_start"]) if args.get("week_start") else WEEK_START_BASE
+    # WEEK_START 注入：只传基准起始日，期号偏移由写稿端 core.issue 推算（勿在此再偏移）
+    ws = str(args["week_start"]) if args.get("week_start") else WEEK_START_DEFAULT
     return CmdSpec(argv, env={"WEEK_START": ws})
 
 

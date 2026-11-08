@@ -43,15 +43,17 @@ WEEKLY="$OUT_ROOT/weekly"
 
 # 打分窗口：正整数期号 → 绝对窗口 [WEEK_START+(期号-1)*7, +7 天)（与导语标签同算法，
 # 与运行日无关）；-1 测试期 → 相对窗口 $WINDOW。
+# 期号派生只认 core.issue（唯一锚点），本脚本不再自己算日期。
 if [[ "$ISSUE" == "-1" ]]; then
     WIN_ARGS=(--window $WINDOW)
     echo "==> issue $ISSUE · db=$DB · window=$WINDOW(相对,$WINDOW_FIELD) · min_score=$MIN_SCORE"
 else
-    if ! WEEK_FROM=$(date -d "$WEEK_START + $(( (ISSUE - 1) * 7 )) days" +%F 2>/dev/null); then
-        echo "错误：WEEK_START 不是合法日期（应为 ISO yyyy-mm-dd）：$WEEK_START" >&2
+    if ! WIN_JSON=$(WEEK_START="$WEEK_START" python -c \
+        "from core.issue import scoring_window as w; print(*w($ISSUE))" 2>/dev/null); then
+        echo "错误：算不出第 $ISSUE 期的窗口（检查 ISSUE 是否正整数、WEEK_START=$WEEK_START 是否为 ISO 日期）" >&2
         exit 1
     fi
-    WEEK_TO=$(date -d "$WEEK_FROM + 7 days" +%F)
+    read -r WEEK_FROM WEEK_TO <<<"$WIN_JSON"
     WIN_ARGS=(--window-dates "$WEEK_FROM" "$WEEK_TO")
     echo "==> issue $ISSUE · db=$DB · window-dates=$WEEK_FROM..$WEEK_TO($WINDOW_FIELD) · min_score=$MIN_SCORE · max_picks=$MAX_PICKS"
 fi

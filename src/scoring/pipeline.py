@@ -20,6 +20,8 @@ from pathlib import Path
 from crawler.client import ClientConfig, PubPeerClient
 from crawler.store import Store as CrawlerStore
 
+from core.time import iso_now as _iso_now  # 全仓统一时间口径（core.time）
+
 from . import config as config_mod
 from . import enrich, issue, report, revisit, score, status as status_mod
 from .cas import CasIndex, minor_name, minor_names
@@ -27,10 +29,6 @@ from .ccf import CcfIndex
 from .jcr import JcrIndex
 from .signals import extract_comment_signals
 from .store import ScoringStore
-
-
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _score_root(args) -> Path:
@@ -239,9 +237,15 @@ def _coverage_md(cov: list[dict]) -> str:
 # ---- status ---------------------------------------------------------------
 
 def cmd_status(args) -> int:
-    return status_mod.main(["--db", args.db, "--output", args.output]
-                           + ([f"--issue={args.issue}"] if getattr(args, "issue", None) is not None else [])
-                           + (["--json"] if getattr(args, "json", False) else []))
+    """只读状态（唯一入口；status 模块不再自带 argparse）。"""
+    try:
+        status = status_mod.collect_status(args.db, issue=getattr(args, "issue", None),
+                                           output_root=args.output)
+    except Exception as exc:  # noqa: BLE001 —— 意外错误才退出 1
+        print(f"status 失败：{exc}", file=sys.stderr)
+        return 1
+    print(status_mod.render(status, as_json=getattr(args, "json", False)))
+    return 0
 
 
 # ---- coverage -------------------------------------------------------------

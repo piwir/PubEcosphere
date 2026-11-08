@@ -6,7 +6,7 @@
     python -m sitejson sync-ai4s --dir output/PubAI4S/<owner>-<repo>   # AI4S 推文归档（幂等）
     python -m sitejson --selftest                  # 离线自测（临时目录 fixture）
 
-派生规则（与已发布第 1–5 期实测值一致）：
+派生规则（与已发布第 1–5 期实测值一致；实现见 `core.issue`，此处不再自算）：
     窗口   [WEEK_START+(N-1)*7, +6 天]      → window: "YYYY-MM-DD – YYYY-MM-DD"
     发布日 WEEK_START+(N-1)*7 + 9 天        → issueDate（周三）
 
@@ -38,13 +38,14 @@ import os
 import re
 import sys
 import tempfile
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from repopath import REPO_ROOT
 
-# 第 1 期数据收集起始日：与 run_issue.sh / llm.generate / agent.tools 同一锚点。
-WEEK_START_DEFAULT = "2026-08-03"
+from core import issue as issue_mod
+from core.issue import WEEK_START_DEFAULT  # 唯一锚点（core.issue 定义，勿在此重定义）
+
 SITE_JSON_DEFAULT = REPO_ROOT / "src" / "site" / "src" / "data" / "site.json"
 
 SUMMARY_TEMPLATE = "PubPeer 周报 · issue {n}"
@@ -56,38 +57,34 @@ class SiteSyncError(Exception):
     """可预期的失败（期号非法 / 文件缺失 / JSON 非法）——CLI 捕获后干净退出 1。"""
 
 
-# ---- 派生 ----------------------------------------------------------------
+# ---- 派生（全部委托 core.issue，唯一锚点；错误类型转成 SiteSyncError） --------
 
 def _week_start(week_start: str | None = None) -> date:
-    raw = week_start or os.environ.get("WEEK_START", WEEK_START_DEFAULT)
     try:
-        return date.fromisoformat(str(raw))
-    except ValueError as exc:
-        raise SiteSyncError(f"WEEK_START 不是合法日期（应为 ISO yyyy-mm-dd）：{raw!r}") from exc
+        return issue_mod.week_start_base(week_start)
+    except issue_mod.IssueError as exc:
+        raise SiteSyncError(str(exc)) from exc
 
 
 def _positive_issue(issue: object) -> int:
-    raw = str(issue)
-    if not (raw.isdigit() and int(raw) > 0):
-        raise SiteSyncError(f"sitejson 只写正整数期号（收到 {raw!r}；-1 测试期不写站点数据）")
-    return int(raw)
+    try:
+        return issue_mod.require_positive_issue(issue)
+    except issue_mod.IssueError as exc:
+        raise SiteSyncError(f"sitejson 只写正整数期号（收到 {issue!r}；-1 测试期不写站点数据）") from exc
 
 
 def issue_window(issue: int, week_start: str | None = None) -> tuple[date, date]:
     """期号 → 素材窗口 [start, start+6 天]（起含止含）。"""
-    start = _week_start(week_start) + timedelta(days=(_positive_issue(issue) - 1) * 7)
-    return start, start + timedelta(days=6)
+    return issue_mod.issue_window(_positive_issue(issue), _week_start(week_start))
 
 
 def issue_date(issue: int, week_start: str | None = None) -> date:
     """期号 → 官网发布日（窗口起始 + 9 天 = 周三）。"""
-    start, _ = issue_window(issue, week_start)
-    return start + timedelta(days=9)
+    return issue_mod.publish_date(_positive_issue(issue), _week_start(week_start))
 
 
 def window_label(issue: int, week_start: str | None = None) -> str:
-    start, end = issue_window(issue, week_start)
-    return f"{start.isoformat()} – {end.isoformat()}"
+    return issue_mod.window_label(_positive_issue(issue), _week_start(week_start))
 
 
 # ---- 读写 ----------------------------------------------------------------

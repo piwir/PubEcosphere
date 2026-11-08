@@ -2,11 +2,18 @@
 
 - 作者回应 / 撤稿声明 / 证据链接 / 多轮交锋 / 独立评论者 / 知名打假人 / 图片 / 时间跨度
 对线关键词（fabricat/fraud…）在 PubPeer 评论中普遍出现、区分度低，v1 不做，保留注释备查。
+
+打假人名单与名字归一统一来自 `core.names`（唯一来源）；本模块保留 `_norm_name` /
+`matches_sleuth` 两个名字作为**向后兼容别名**，供 `scoring.material` 等既有调用点使用。
 """
 from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+
+from core.names import matches_sleuth as _core_matches_sleuth
+from core.names import norm_name as _norm_name
+from core.names import SLEUTHS
 
 from . import config
 
@@ -15,25 +22,14 @@ _DOI_RE = re.compile(r"10\.\d{4,9}/[^\s)\"']+")
 _ROUND_RE = re.compile(r"#\s*(\d+)")
 
 
-def _norm_name(s: str) -> str:
-    """名字归一：小写 + 非字母数字（标点/连字符/空白/全角字符）折叠为单个空格。
-
-    用于打假人名单的全等匹配，容忍 'Elisabeth M. Bik' 与 'Elisabeth M Bik'、
-    'Yi‐ming Yuan'（U+2010 连字符）等同一人的书写差异。
-    """
-    return re.sub(r"[^a-z0-9]+", " ", (s or "").strip().lower()).strip()
-
-
-def matches_sleuth(name: str, sleuths: tuple) -> bool:
+def matches_sleuth(name: str, sleuths: tuple | None = None) -> bool:
     """精确别名匹配：评论者显示名（别名/真名）与打假人名单归一后全等。
 
     名单存「真名/马甲」的精确键（如 'Elisabeth M Bik'、'Hoya Camphorifolia'），
     只做书写归一、不做姓氏模糊，避免同姓（如 Ben-David 撞 Sholto David）误判。
+    实现与名单都在 `core.names`；`sleuths` 缺省用 `config.ScoringConfig.sleuths`。
     """
-    n = _norm_name(name)
-    if not n:
-        return False
-    return any(_norm_name(s) == n for s in sleuths)
+    return _core_matches_sleuth(name, sleuths if sleuths is not None else SLEUTHS)
 
 
 def _dt(s: str | None) -> datetime | None:

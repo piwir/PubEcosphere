@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
+
+from core import db as core_db
+from core.time import iso_now as _iso_now
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS doi_resolution (
@@ -65,10 +68,6 @@ CREATE TABLE IF NOT EXISTS published (
 """
 
 
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _rows(cur) -> list[dict]:
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -79,11 +78,8 @@ class ScoringStore:
 
     def __init__(self, path: str | Path):
         self.path = str(path)
-        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        # timeout/busy_timeout：默认 5s 太短，与 capture/rank/pick/DB 拷贝并发时容易撞
-        # 「database is locked」直接抛出去（本地 cron 里表现为 enrich 天天失败）。
-        self.conn = sqlite3.connect(self.path, timeout=30.0)
-        self.conn.execute("PRAGMA busy_timeout=30000")
+        # 连接参数统一走 core.db（30s 超时 + busy_timeout，与 crawler.store 一致）
+        self.conn = core_db.connect(self.path)
         self.conn.executescript(SCHEMA)
         self._migrate()
 
@@ -96,12 +92,9 @@ class ScoringStore:
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
-        try:
-            yield self.conn
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+        """事务上下文（委托 core.db.tx：正常 commit、异常 rollback）。"""
+        with core_db.tx(self.conn) as conn:
+            yield conn
 
     # ---- doi_resolution ---------------------------------------------------
 
@@ -179,7 +172,6 @@ class ScoringStore:
         cur = self.conn.execute(
             f"SELECT doi, fetched_at FROM v3_feedback WHERE doi IN ({q})", dois)
         fresh: set[str] = set()
-        from datetime import timedelta
         cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
         for r in _rows(cur):
             try:

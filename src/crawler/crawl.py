@@ -21,7 +21,8 @@ from datetime import timedelta
 
 from . import dates
 from .client import ClientConfig, PubPeerClient
-from .parser import parse_feed_item, parse_publication_page
+from .parser import parse_feed_item
+from .revisit import revisit_one
 from .store import Store
 
 
@@ -70,24 +71,18 @@ def cmd_revisit(args: argparse.Namespace, client: PubPeerClient, store: Store) -
     n_ok = n_skip = n_comments = 0
     for rec in pending:
         pid = rec["pubpeer_id"]
-        try:
-            html = client.publication_page(pid)
-            pub, comments = parse_publication_page(html)
-            store.upsert_publication(pub, dates.now_iso())
-            store.upsert_comments(pid, comments)
-            store.mark_revisited(pid, dates.now_iso())
+        status, n_c = revisit_one(client, store, pid)
+        if status == "ok":
             n_ok += 1
-            n_comments += len(comments)
+            n_comments += n_c
             if args.verbose:
-                print(f"  {pid}: {len(comments)} comments", flush=True)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:     # 文章已不存在，标记跳过
-                store.mark_revisited(pid, dates.now_iso())
-                n_skip += 1
-            else:
-                print(f"  {pid}: HTTP {exc.code}, skipped", flush=True)
-        except Exception as exc:    # noqa: BLE001 —— 单条失败不中断整体
-            print(f"  {pid}: error {exc}, skipped", flush=True)
+                print(f"  {pid}: {n_c} comments", flush=True)
+        elif status == "not_found":
+            n_skip += 1
+        elif status == "http_error":
+            print(f"  {pid}: HTTP {n_c}, skipped", flush=True)
+        else:
+            print(f"  {pid}: error {n_c}, skipped", flush=True)
     print(f"revisit done: {n_ok} ok, {n_skip} not-found, {n_comments} comments stored", flush=True)
     return n_ok
 

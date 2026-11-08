@@ -19,13 +19,14 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
-from crawler.client import ClientConfig, PubPeerClient
+from crawler.client import PubPeerClient
 from crawler.export import render_publication
 
-from . import config as config_mod
+from core.display import impact_display
+from core.time import iso_now as _iso_now
+
 from .cas import minor_names
 from .store import ScoringStore
 
@@ -39,18 +40,9 @@ def category_for(major: str, minor: str | None) -> str:
     return major
 
 
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _impact_display(r: dict) -> str:
-    if r.get("impact_factor"):
-        return f"IF {r['impact_factor']:.1f}"
-    if r.get("partition"):
-        return f"{r['partition']}区" + ("·Top" if r.get("top") else "")
-    if r.get("ccf_grade"):
-        return f"CCF {r['ccf_grade']}"
-    return "-"
+    """期刊影响力展示（唯一实现在 core.display.impact_display）。"""
+    return impact_display(r)
 
 
 def _load_run(sstore: ScoringStore, run_id: str) -> tuple[list[dict], dict[str, dict]]:
@@ -235,32 +227,3 @@ def build_issue(sstore: ScoringStore, client: PubPeerClient, run_id: str, issue:
         sstore.mark_published(published_rows)
     print(f"  manifest: {len(rows_out)} picks / {len(set(r['category'] for r in rows_out))} 类", flush=True)
     return picked_rows, issue_dir
-
-
-if __name__ == "__main__":
-    import argparse
-    import sys
-    ap = argparse.ArgumentParser(description="周报素材打包（调试入口，正式走 scoring.pipeline pick）")
-    ap.add_argument("--db", default="data/pubpeer.db")
-    ap.add_argument("--issue", required=True)
-    ap.add_argument("--run-id", default=None)
-    ap.add_argument("--delay", type=float, default=1.5)
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args()
-    cfg = config_mod.ScoringConfig()
-    sstore = ScoringStore(args.db)
-    run_id = args.run_id or sstore.latest_run_id()
-    if args.dry_run:
-        rows, _ = _load_run(sstore, run_id)
-        picks, grouped = select_picks(rows, sstore.published_ids(exclude_issue=args.issue), cfg)
-        print(f"dry-run: run={run_id}, picks {len(picks)} / {len(grouped)} 类")
-        for cat in sorted(grouped, key=lambda c: -len(grouped[c])):
-            sel = [p for p in picks if p["category"] == cat]
-            if sel:
-                print(f"  {cat} ({len(grouped[cat])} 候选→取 {len(sel)}): "
-                      + ", ".join(p["pubpeer_id"] for p in sel))
-        sys.exit(0)
-    picks, issue_dir = build_issue(sstore, PubPeerClient(ClientConfig(delay=args.delay)),
-                                   run_id, args.issue, cfg)
-    print(f"pick done: {len(picks)} articles, issue={args.issue}, run={run_id}")
-    print(f"  → {issue_dir}")

@@ -12,6 +12,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from core import db as core_db
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS captures (
     pubpeer_id          TEXT PRIMARY KEY,
@@ -62,20 +64,15 @@ CREATE INDEX IF NOT EXISTS idx_comments_accepted ON comments(accepted_at);
 class Store:
     def __init__(self, path: str | Path):
         self.path = str(path)
-        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        # 同 scoring.store：给足 30s 锁等待，避免与 enrich/rank/DB 拷贝并发时直接报错
-        self.conn = sqlite3.connect(self.path, timeout=30.0)
-        self.conn.execute("PRAGMA busy_timeout=30000")
+        # 连接参数统一走 core.db（30s 超时 + busy_timeout，与 scoring.store 一致）
+        self.conn = core_db.connect(self.path)
         self.conn.executescript(SCHEMA)
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
-        try:
-            yield self.conn
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+        """事务上下文（委托 core.db.tx：正常 commit、异常 rollback）。"""
+        with core_db.tx(self.conn) as conn:
+            yield conn
 
     # -- captures ------------------------------------------------------------
 

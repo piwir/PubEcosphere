@@ -15,16 +15,12 @@ from pathlib import Path
 
 from repopath import REPO_ROOT
 
+from core.names import SLEUTHS as SLEUTH_KEYS  # 打假人唯一名单（core.names）
+from core.names import find_sleuth, norm_name
+
 IMAGE_REF_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 PID_TAG_RE = re.compile(r"PID:([0-9A-Fa-f]{6,})")
 KINDS = ("first_merged", "author_merged", "sleuth_merged")
-
-# 打假人署名统一口径守护：与 scoring/config.py 的 sleuths 保持一致（勿回退）。
-# 仅用于扫描告警，绝不写入产出。归一化后的小写整串。
-SLEUTH_KEYS = (
-    "elisabeth m bik", "hoya camphorifolia", "sholto david", "leonid schneider",
-    "matthew schrag", "david sanders", "clare francis",
-)
 
 # 固定简介图：由写稿提示词作为固定块输出引用（intro.png），这里只把 images/intro.png 复制到
 # 与 md 同目录，供 md2html/inline_images 解析；文案以写稿提示词为唯一来源，不经排版阶段。
@@ -33,8 +29,8 @@ INTRO_SRC = REPO_ROOT / "images" / "intro.png"
 
 
 def _norm(s: str) -> str:
-    """小写 + 非字母数字折叠为空格（与 scoring/signals.py 的 _norm_name 同一归一化）。"""
-    return re.sub(r"[^a-z0-9]+", " ", s.lower())
+    """小写 + 非字母数字折叠为空格（与 core.names.norm_name 同一归一化）。"""
+    return norm_name(s)
 
 
 def _split_name(name: str) -> tuple[str | None, str | None]:
@@ -101,7 +97,8 @@ def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
             warnings.append(f"material 中不存在 {pid}_files/{flat}.png（被引用了：{name}）")
             return match.group(0)
         target = f"{pid}_{flat}.png"
-        if base == "sleuth_merged" and any(key in _norm(alt) for key in SLEUTH_KEYS):
+        norm_alt = _norm(alt)
+        if base == "sleuth_merged" and any(key in norm_alt for key in SLEUTH_KEYS):
             warnings.append(f"其他评论者补充图 alt 疑似含打假人姓名（违反统一口径）：{alt}")
         if not dry_run:
             out.mkdir(parents=True, exist_ok=True)
@@ -111,10 +108,8 @@ def assemble_weekly(draft_path: str | Path, material_dir: str | Path,
     rewritten = IMAGE_REF_RE.sub(rewrite, text)
     if "知名打假人" in rewritten:
         warnings.append("产出含「知名打假人」字样，违反打假人署名统一口径")
-    norm_text = _norm(rewritten)
-    for key in SLEUTH_KEYS:
-        if key in norm_text:
-            warnings.append(f"产出含打假人姓名「{key}」，违反署名统一口径（正文不应出现打假人姓名）")
+    for key in find_sleuth(rewritten):
+        warnings.append(f"产出含打假人姓名「{key}」，违反署名统一口径（正文不应出现打假人姓名）")
     if not dry_run:
         out.mkdir(parents=True, exist_ok=True)
         out_md = out / (f"{issue}.md" if issue else draft.name.replace("_draft", ""))

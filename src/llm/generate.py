@@ -9,12 +9,13 @@
 """
 from __future__ import annotations
 
-import os
 import shutil
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Iterable, Optional
+
+from core.issue import IssueError, date_range_label
 
 from .assemble import assemble_weekly
 from .client import LLMClient
@@ -82,15 +83,12 @@ def weekly_date_range(issue: int, week_start: str | None = None) -> str:
 
     起始 = week_start + (issue-1)*7，结束 = 起始 + 6 天；格式 `M.DD–M.DD`（如 `8.03–8.09`）。
     导语第一句的 `（素材收集 <FROM>–<TO>）` 由写稿模型从该值转抄。
+    实现委托 `core.issue.date_range_label`（唯一锚点，勿在此自算）。
     """
-    base_str = week_start or os.environ.get("WEEK_START", "2026-08-03")
     try:
-        base = date.fromisoformat(base_str)
-    except ValueError:
-        raise GenerationBlocked(f"WEEK_START 不是合法日期（应为 ISO yyyy-mm-dd）：{base_str!r}")
-    start = base + timedelta(days=(issue - 1) * 7)
-    end = start + timedelta(days=6)
-    return f"{start.month}.{start.day:02d}–{end.month}.{end.day:02d}"
+        return date_range_label(issue, week_start)
+    except IssueError as exc:
+        raise GenerationBlocked(str(exc)) from exc
 
 
 def generate_issue(material_dir: str | Path, weekly_dir: str | Path, issue: str = "",

@@ -3,15 +3,17 @@
 纯只读：不联网、不写 DB、不建表、不建索引、不 import `llm`（避免 .env 导入副作用）。
 DB 缺失不算错误（如实报告 db_exists=false），意外异常才返回 1。
 
+**对外只有一个入口**：`python -m scoring.pipeline status`（本模块只提供
+`collect_status` / `render_json` / `_fmt_human`，不再自带 argparse——曾经两个入口
+参数各自演化，`--issue=3` 与 `--issue 3` 的支持度不一样）。
+
 用法：
     python -m scoring.pipeline status [--db data/pubpeer.db] [--issue <n>] [--json]
 """
 from __future__ import annotations
 
-import argparse
 import json
 import sqlite3
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -209,26 +211,8 @@ def _fmt_human(status: dict) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="流水线只读状态")
-    ap.add_argument("--db", default="data/pubpeer.db")
-    ap.add_argument("--output", default="output", help="output 根目录（默认 output）")
-    ap.add_argument("--issue", default=None, help="只看指定期号")
-    ap.add_argument("--json", action="store_true", help="输出 JSON")
-    args = ap.parse_args(argv)
-
-    try:
-        status = collect_status(args.db, issue=args.issue, output_root=args.output)
-    except Exception as exc:  # noqa: BLE001 —— 意外错误才退出 1
-        print(f"status 失败：{exc}", file=sys.stderr)
-        return 1
-
-    if args.json:
-        print(json.dumps(status, ensure_ascii=False, indent=2))
-    else:
-        print(_fmt_human(status))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def render(status: dict, as_json: bool = False) -> str:
+    """把 `collect_status` 的结果渲染成 CLI 输出文本（JSON 或人类可读）。"""
+    if as_json:
+        return json.dumps(status, ensure_ascii=False, indent=2)
+    return _fmt_human(status)

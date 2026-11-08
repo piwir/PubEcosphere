@@ -1,6 +1,6 @@
 """阶段A：抓取仓库 + 官网有界爬取 → 下载图片 → codegraph 代码结构摘要 → LLM 提取结构化材料 md。
 
-流程（与父仓库 pick→material 思路一致）：
+流程（与周报 pick→material 思路一致）：
 1. 抓取仓库元数据 + README + 官网爬取（site.crawl_site：链接索引 + 首页文本 + 子页面摘要，失败不阻塞）；
 2. 可选 codegraph 本地索引 → 代码结构摘要（inputs/codegraph.txt；未装/失败自动降级）；
 3. 下载候选图片（社交封面/og:image → cover.png，README → img-N.png，爬取页配图每页至多 2 张），

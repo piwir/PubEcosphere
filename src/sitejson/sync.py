@@ -193,7 +193,8 @@ def sync_site_json(site_json_path: str | Path | None = None, issue: int = 0, *,
 
 # ---- AI4S 推文归档（sync-ai4s）-------------------------------------------
 
-AI4S_GITHUB_DEFAULT = "https://github.com/piwir/PubAI4S"
+# 推文模块在主干仓库里（已不再是独立仓库）：官网 AI4S 页的「由 PubAI4S 生成」指向它
+AI4S_GITHUB_DEFAULT = "https://github.com/piwir/PubEcosphere/tree/main/modules/ai4s"
 AI4S_DIR_DEFAULT = REPO_ROOT / "output" / "PubAI4S"
 AI4S_POST_KEYS = ("no", "repo", "name", "date", "summary", "url")
 # 结尾固定块 `> GitHub：[github.com/o/n](...)`：两份提示词约定的唯一出处，避开正文里的第三方链接
@@ -424,7 +425,7 @@ _FIXTURE = {
         {"issue": 5, "date": "2026-09-09", "wechatUrl": "https://mp.weixin.qq.com/s/OLD",
          "summary": "PubPeer 周报 · issue 5"},
     ],
-    "ai4s": {"github": "https://github.com/piwir/PubAI4S", "posts": []},
+    "ai4s": {"github": "https://github.com/piwir/PubEcosphere/tree/main/modules/ai4s", "posts": []},
 }
 
 

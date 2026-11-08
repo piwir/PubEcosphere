@@ -1,4 +1,4 @@
-"""渲染：post.md → html → base64 内联 html（复用父仓库 llm.md2html / llm.inline_images）。
+"""渲染：post.md → html → base64 内联 html（复用通用层 llm.md2html / llm.inline_images）。
 
 产出到 md 同目录：
 - post.html           md2html 转换（keep-title）+ 图注改写
@@ -25,7 +25,7 @@ _CAPTION_STYLE = ("text-align:center;font-size:12px;color:#6F6A5E;"
                   "margin:-8px 8px 24px;")
 
 # 兜底：转换器 remark 往返会把正文 `_`/`*`/`[` 转义成 \_ 等，marked 的 URL token
-# 不解反转义（URL 残留反斜杠、href 变 %5C）。对非代码段做字面还原（跳过策略与父仓库
+# 不解反转义（URL 残留反斜杠、href 变 %5C）。对非代码段做字面还原（跳过策略与周报
 # polish_html 的 _TextRewriter 同构）；转换器侧已在 renderer.ts 同步根治，此处防陈旧 dist。
 _UNESCAPE_SPLIT_RE = re.compile(
     r"(<code[^>]*>.*?</code>|<pre[^>]*>.*?</pre>"
@@ -63,7 +63,7 @@ def render_post(md_path: Path, out_dir: Path) -> Path:
     html_path = md_path.with_suffix(".html")
     if rc != 0 or not html_path.exists():
         raise RuntimeError(
-            f"md2html 转换失败（返回 {rc}）。请检查父仓库 vendor 依赖："
+            f"md2html 转换失败（返回 {rc}）。请检查仓库内 vendor 依赖："
             "cd src/vendor/md2html-cli && npx -y bun install")
     html = html_path.read_text(encoding="utf-8")
     html = _unescape_underscores(html)

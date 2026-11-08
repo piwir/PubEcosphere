@@ -249,7 +249,7 @@ def _site_sync(args: dict) -> CmdSpec:
 def _pubai4s_out_dir(args: dict) -> list[str]:
     if args.get("out_dir"):
         return ["--out-dir", str(_output_path(args["out_dir"]))]
-    return []  # 默认：父仓库 output/PubAI4S（pubai4s 自动推导）
+    return []  # 默认：仓库根 output/PubAI4S（pubai4s 自动推导）
 
 
 def _pubai4s_fetch(args: dict) -> CmdSpec:

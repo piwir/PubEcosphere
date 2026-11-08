@@ -1,6 +1,7 @@
 """CLI：python -m pubai4s run|fetch|archmap|render|check <args>。
 
-依赖父仓库 PubEcosphere 的 llm.*（可编辑安装）；缺父仓库时干净退出 1。
+本模块在 `modules/ai4s/`，与周报流水线共用同一发行版（一次 `pip install -e .`）：
+复用 `llm.*`（LLM 客户端与渲染）与 `repopath.REPO_ROOT`（仓库根）。
 
 子命令：
   run     <repo_url>  全流程：抓取 → 提取材料 → 写稿 → 渲染（调 LLM）
@@ -17,9 +18,10 @@ import sys
 from pathlib import Path
 
 try:
-    import llm  # noqa: F401  父仓库 editable install 提供
+    import llm  # noqa: F401  主仓库通用层提供
+    from repopath import REPO_ROOT
 except ImportError:
-    print("缺少父仓库 PubEcosphere：请先在父仓库根目录 `pip install -e .` 后重试。",
+    print("缺少 PubEcosphere 公共包：请在仓库根目录 `pip install -e .` 后重试。",
           file=sys.stderr)
     raise SystemExit(1)
 
@@ -28,11 +30,11 @@ from .extract import (README_LIMIT, SUMMARY_LIMIT, ExtractionError,
                       append_image_manifest, extract_material, fetch_stage)
 from .generate import PostGenerationError, generate_post
 from .github import GitHubClient, RateLimitedError, RepoNotFoundError
-from .prompts import SUBMODULE_ROOT, validate_prompts
+from .prompts import validate_prompts
 from .render import render_post
 
-# 子模块本地不落产物：固定到父仓库 output/（SUBMODULE_ROOT = <父仓库>/submodules/PubAI4S）
-DEFAULT_OUT_DIR = str(SUBMODULE_ROOT.parent.parent / "output" / "PubAI4S")
+# 产物统一落在仓库根 output/PubAI4S（模块内不落产物）
+DEFAULT_OUT_DIR = str(REPO_ROOT / "output" / "PubAI4S")
 
 
 def parse_repo_url(url: str) -> tuple[str, str]:
@@ -212,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("repo_url")
     p_run.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     p_run.add_argument("--model", default=None,
-                       help="覆盖 LLM 模型（默认取父仓库 .env 的 PUBECOSPHERE_LLM_MODEL）")
+                       help="覆盖 LLM 模型（默认取仓库根 .env 的 PUBECOSPHERE_LLM_MODEL）")
     p_run.add_argument("--dry-run", action="store_true", help="只抓取预览，不调 LLM")
     p_run.add_argument("--no-codegraph", action="store_true",
                        help="跳过 codegraph 代码结构摘要（默认自动）")

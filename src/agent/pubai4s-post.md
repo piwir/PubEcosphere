@@ -4,14 +4,14 @@
 
 ## 前置
 
-- 工作目录：PubEcosphere 仓库根（命令用 `python -m pubai4s`；模块不可用时先在 `submodules/PubAI4S` 执行 `pip install -e .`）。
+- 工作目录：PubEcosphere 仓库根（命令用 `python -m pubai4s`；代码在 `modules/ai4s/`，随主仓库一次 `pip install -e .` 安装，无需单独装包）。
 - 产物目录：`output/PubAI4S/<owner>-<repo>/`（fetch 默认写入这里）。
 
 ## 流程
 
 1. **抓取**：`python -m pubai4s fetch <repo_url>`。codegraph 对大仓库需下载数百 MB tarball 并索引（数分钟）；若产物目录已有上次的 `inputs/codegraph.txt` 可复用——先备份该文件、用 `--no-codegraph` 抓取、再把备份还原回 `inputs/`，还原后跑 `python -m pubai4s archmap <产物目录>` 补生成 `arch.png`（会自动插入 images.md 清单首位）。重跑即整体重建：inputs/material/post 覆盖写；若新旧两次图片清单差异大，先删掉产物目录下的旧 `img-*.png`/`cover.png`/`arch.png` 再抓，避免同名旧图混淆。
-2. **阶段A（自己写材料，不调外部 LLM 接口）**：读 `submodules/PubAI4S/docs/prompts/prompt_extract.md` 全文作为行为准则，读 `output/PubAI4S/<owner>-<repo>/inputs/` 下 meta.txt / readme.md / website.txt / codegraph.txt（任一可能缺失，如实处理）→ 严格按其模板写 `output/PubAI4S/<owner>-<repo>/material.md`（**不含**「已下载图片清单」小节）→ 末尾追加图片清单：用 `python -c` 调 `pubai4s.extract.append_image_manifest`（或按 `images.md` 等价拼接 `- ![alt](filename)` 行；fetch 在 codegraph 可用时会把 `arch.png` 生成好并置于清单首位，照单拼接即可）。
-3. **阶段B（自己写稿）**：读 `submodules/PubAI4S/docs/prompts/prompt_writer.md` 全文作为唯一骨架依据 + material.md 作为唯一事实依据 → 写 `output/PubAI4S/<owner>-<repo>/post.md`（约 2000-3000 字）。
+2. **阶段A（自己写材料，不调外部 LLM 接口）**：读 `modules/ai4s/prompts/prompt_extract.md` 全文作为行为准则，读 `output/PubAI4S/<owner>-<repo>/inputs/` 下 meta.txt / readme.md / website.txt / codegraph.txt（任一可能缺失，如实处理）→ 严格按其模板写 `output/PubAI4S/<owner>-<repo>/material.md`（**不含**「已下载图片清单」小节）→ 末尾追加图片清单：用 `python -c` 调 `pubai4s.extract.append_image_manifest`（或按 `images.md` 等价拼接 `- ![alt](filename)` 行；fetch 在 codegraph 可用时会把 `arch.png` 生成好并置于清单首位，照单拼接即可）。
+3. **阶段B（自己写稿）**：读 `modules/ai4s/prompts/prompt_writer.md` 全文作为唯一骨架依据 + material.md 作为唯一事实依据 → 写 `output/PubAI4S/<owner>-<repo>/post.md`（约 2000-3000 字）。
 4. **渲染**：`python -m pubai4s render output/PubAI4S/<owner>-<repo>` → 产出 `post.html` + `post-base64.html`。
 5. **官网归档**：`python -m sitejson sync-ai4s --dir output/PubAI4S/<owner>-<repo>`（MCP 为 `site_sync` 传 `out_dir`）把本篇写进 `src/site/src/data/site.json` 的 `ai4s.posts`——只动 `ai4s`（周报字段一概不动）、按 repo 去重、幂等、不 commit 不 push；`repo` / 项目名 / 摘要 / 日期从 `post.md` 派生（发布日不同用 `--date` 指定）。**公众号链接发布后在 `ai4s.posts[].url` 补上再重跑一次**，AI4S 页即由「即将发布」变为可点阅读；补链接时不要重跑 fetch/写稿。
 6. **人工审核**：报告产物路径与自检结果，等用户过稿；不自行发布。

@@ -1,4 +1,13 @@
 # PubEcosphere 打包配置。
+#
+# 布局（单发行版、单次 pip install -e .）：
+#   src/               通用层（core / llm / agent / sitejson）+ 官网前端与 vendored 转换器
+#   modules/weekly/    周报产品线（crawler / scoring / writer），提示词与流水线脚本随模块走
+#   modules/ai4s/      推文产品线（pubai4s）
+#
+# packages.find 的 where 收多个根：src/ 与每个 modules/* 都是一级包根，
+# 因此 crawler / scoring / writer / pubai4s / core / llm / agent / sitejson
+# 都直接可 import，命令行仍是 `python -m <包>.<模块>`（无需改任何既有命令）。
 [build-system]
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
@@ -14,9 +23,10 @@ dependencies = [
 ]
 
 [tool.setuptools]
+# src/ 布局的顶层裸模块（不在任何包内）
 py-modules = ["repopath"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "modules/weekly", "modules/ai4s"]
 namespaces = false

@@ -1,15 +1,15 @@
 # src/agent — 流水线的 agent 封装（MCP server + subagent 提示词）
 
-同一套 CLI 与 `docs/prompts/` 写稿提示词，两种挂载形态，按场景选用：
+同一套 CLI 与 `modules/weekly/prompts/` 写稿提示词，两种挂载形态，按场景选用：
 
 | 形态 | 载体 | 适用场景 |
 | --- | --- | --- |
 | MCP server | `mcp_server.py`（`mcp.sh` 启动） | 定时 / 无头客户端：17 个确定性工具转发 |
 | subagent 提示词 | `pubecosphere-weekly.md` / `pubai4s-post.md` | 交互式 agent：全流程编排 + 写稿一体 |
 
-**分工原则**：确定性步骤（抓取 / 打分 / 图材 / 排版渲染）走 CLI 或 MCP 工具；LLM 写稿默认由 subagent 本体按 `docs/prompts/` 提示词完成（不依赖外部接口），「走 API」时用 `generate` / `pubai4s_run`。两形态不复制编排知识：流程细节只在 `run_issue.sh` 头注释与两份提示词里。
+**分工原则**：确定性步骤（抓取 / 打分 / 图材 / 排版渲染）走 CLI 或 MCP 工具；LLM 写稿默认由 subagent 本体按 `modules/weekly/prompts/` 提示词完成（不依赖外部接口），「走 API」时用 `generate` / `pubai4s_run`。两形态不复制编排知识：流程细节只在 `modules/weekly/run_issue.sh` 头注释与两份提示词里。
 
-**前提**：`pip install -e .`，推文流水线另需 `pip install -e submodules/PubAI4S`（否则 `pubai4s_*` 三工具不可用）；vendored md2html 就绪（`cd src/vendor/md2html-cli && npx -y bun install`）。
+**前提**：`pip install -e .`，推文流水线随主仓库一起安装（`modules/ai4s` 由同一次 `pip install -e .` 收进，无需单独装）；vendored md2html 就绪（`cd src/vendor/md2html-cli && npx -y bun install`）。
 
 ## MCP server（17 工具）
 

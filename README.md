@@ -37,12 +37,12 @@ python -m crawler.crawl --db data/pubpeer.db capture            # 每日捕获 f
 python -m crawler.crawl --db data/pubpeer.db revisit --limit 50  # 回访
 
 # 生成
-ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
+ISSUE=n bash modules/weekly/run_issue.sh  # 一键跑一期全流程
 ```
 
 脚本流程（**数据由 cron 爬虫供给，脚本默认不跑爬虫**）：`capture/revisit(可选) → rank → pick → material → generate/assemble → md2html → polish_html → inline_images(base64)`。
 
-常用环境变量（完整见 [run_issue.sh](run_issue.sh) 头部注释）：
+常用环境变量（完整见 [modules/weekly/run_issue.sh](modules/weekly/run_issue.sh) 头部注释）：
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
@@ -54,13 +54,14 @@ ISSUE=n ./run_issue.sh                    # 一键跑一期全流程
 | `RUN_REVISIT` | `0` | `1` = 先跑回访 revisit（默认 0：数据由长期 cron 爬虫供给，脚本只管生成） |
 | `DRY_RUN` | `0` | `1` = 只预览 pick |
 
-每期产物在 `output/issue/<期号>/`：`score/`（打分报告）、`pub/` + `manifest.*`（素材与清单；图材合并图与结构化素材 md 写回 `pub/<pid>_files/`）、`weekly/`（周报成品 + `*-base64.html` 微信粘贴用）。不用脚本时各步骤的单条命令见 `run_issue.sh` 头注释与 [agent/README.md](src/agent/README.md)。
+每期产物在 `output/issue/<期号>/`：`score/`（打分报告）、`pub/` + `manifest.*`（素材与清单；图材合并图与结构化素材 md 写回 `pub/<pid>_files/`）、`weekly/`（周报成品 + `*-base64.html` 微信粘贴用）。不用脚本时各步骤的单条命令见 `modules/weekly/run_issue.sh` 头注释与 [agent/README.md](src/agent/README.md)。
 
 ## LLM 周报生成
 
-- `python -m llm generate` 用**同一个模型**完成提取 + 写稿（纯文本，图片描述来自评论者配图时的原话）。
+- `python -m writer generate` 用**同一个模型**完成提取 + 写稿（纯文本，图片描述来自评论者配图时的原话）。
+- `python -m llm md2html` / `python -m llm.inline_images` 是两条产品线共用的渲染工具。
 
-提示词见 `docs/prompts/`。
+提示词见 `modules/weekly/prompts/`。
 
 ### LLM 配置
 
@@ -74,9 +75,9 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 
 ## Agent 集成
 
-同一套 CLI 与写稿提示词，两种挂载形态：**MCP server**（17 个确定性工具，供定时/无头客户端）与 **subagent 系统提示词**（交互式 agent，全流程编排 + 写稿一体）。确定性步骤走 CLI/MCP 工具，写稿默认由 subagent 本体按 `docs/prompts/` 提示词完成，「走 API」时用 `generate` / `pubai4s_run`。
+同一套 CLI 与写稿提示词，两种挂载形态：**MCP server**（17 个确定性工具，供定时/无头客户端）与 **subagent 系统提示词**（交互式 agent，全流程编排 + 写稿一体）。确定性步骤走 CLI/MCP 工具，写稿默认由 subagent 本体按 `modules/weekly/prompts/` 提示词完成，「走 API」时用 `writer generate` / `pubai4s_run`。
 
-**前提**：`pip install -e .`；推文流水线另需 `pip install -e submodules/PubAI4S`；`cd src/vendor/md2html-cli && npx -y bun install`（首次联网拉传递依赖一次）；`.env` 配 `PUBECOSPHERE_LLM_API_KEY`（仅「走 API」模式需要）。
+**前提**：一次 `pip install -e .` 装齐全部包（含 `modules/ai4s` 的推文流水线，无需单独安装）；`cd src/vendor/md2html-cli && npx -y bun install`（首次联网拉传递依赖一次）；`.env` 配 `PUBECOSPHERE_LLM_API_KEY`（仅「走 API」模式需要）。
 
 **MCP 挂载**（客户端的 MCP 配置里添加，必须**绝对路径**启动脚本）：
 
@@ -135,28 +136,29 @@ https://piwir.github.io/PubEcosphere/ （Vue 3 + Vite，GitHub Actions 自动部
 
 ```
 PubEcosphere/
-├── src/                  # 全部代码
-│   ├── crawler/          # 爬虫模块
-│   ├── scoring/          # 打分系统
-│   ├── llm/              # LLM 周报生成
-│   ├── agent/            # MCP server + subagent 提示词
+├── src/                  # 通用层 + 官网 + agent 接口
+│   ├── core/             # 通用工具（期号派生/时间/打假人名单/展示/DB/提示词骨架）
+│   ├── llm/              # 通用 LLM 客户端 + md→html / 图片内联渲染
+│   ├── agent/            # MCP server + 两份 subagent 提示词
 │   ├── site/             # 官网前端
+│   ├── sitejson/         # 官网归档
 │   ├── vendor/           # md→html 转换器
 │   └── repopath.py       # 仓库根定位
-├── run_issue.sh          # 一键流水线脚本
+├── modules/
+│   ├── weekly/           # 周报产品线：crawler / scoring / writer + prompts + run_issue.sh
+│   └── ai4s/             # 推文产品线：pubai4s + prompts
 ├── pyproject.toml        # 打包配置
 ├── images/               # 项目素材
 ├── data/                 # 运行数据
 ├── output/               # 输出周报
-├── docs/                 # 文档
-└── submodules/PubAI4S/   # AI4S 项目推文工具
+└── docs/                 # 本地私有文档（gitignored）
 ```
 
 ## 详细文档
 
 | 文档 | 内容 |
 | --- | --- |
-| `docs/prompts/` | 文本提取 / 写稿 两套提示词 |
+| `modules/weekly/prompts/` | 周报文本提取 / 写稿 两套提示词 |
 | `src/agent/README.md` | MCP 工具 + subagent 提示词说明 |
 | `src/site/README.md` | 网站说明 |
 

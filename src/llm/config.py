@@ -16,7 +16,10 @@ from pathlib import Path
 from repopath import REPO_ROOT
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-PROMPT_DIR_DEFAULT = REPO_ROOT / "docs" / "prompts"
+
+# 提示词目录不再由通用层指定：周报的提示词归 modules/weekly/prompts（由 writer.prompts
+# 传 prompt_dir），推文的归 modules/ai4s/prompts。这里只保留环境变量名，供调用方覆盖。
+ENV_PROMPT_DIR = "PUBECOSPHERE_LLM_PROMPT_DIR"
 
 # 仓库根下的 .env；gitignored，不随代码提交。
 ENV_FILE = REPO_ROOT / ".env"
@@ -60,7 +63,8 @@ class LLMConfig:
     timeout: float = 120.0
     max_retries: int = 3
     backoff: float = 5.0
-    prompt_dir: str = str(PROMPT_DIR_DEFAULT)
+    # 提示词目录：空串 = 由调用方（writer / pubai4s）决定；可被环境变量覆盖。
+    prompt_dir: str = ""
 
     @classmethod
     def from_env(cls, prompt_dir: str | None = None) -> "LLMConfig":
@@ -72,8 +76,7 @@ class LLMConfig:
             "timeout": float(os.environ.get("PUBECOSPHERE_LLM_TIMEOUT", "120")),
             "max_retries": int(os.environ.get("PUBECOSPHERE_LLM_MAX_RETRIES", "3")),
             "backoff": float(os.environ.get("PUBECOSPHERE_LLM_BACKOFF", "5")),
-            "prompt_dir": prompt_dir
-            or os.environ.get("PUBECOSPHERE_LLM_PROMPT_DIR", str(PROMPT_DIR_DEFAULT)),
+            "prompt_dir": prompt_dir or os.environ.get(ENV_PROMPT_DIR, ""),
         }
         # 只保留 dataclass 定义的字段，避免多传未知键。
         names = {f.name for f in fields(cls)}

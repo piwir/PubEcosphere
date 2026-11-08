@@ -20,7 +20,7 @@ from pathlib import Path
 from PIL import Image
 
 from .assemble import assemble_weekly
-from .client import LLMConfig, LLMClient, LLMError, default_transport
+from llm.client import LLMConfig, LLMClient, LLMError, default_transport
 from .generate import generate_issue, issue_header, material_papers, weekly_date_range
 from .polish_html import polish_html, repair_github_links, style_footer_links
 from .prompts import validate_prompt_schema

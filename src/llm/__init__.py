@@ -1,9 +1,15 @@
-"""LLM 周报生成包：单模型端到端（`python -m llm generate`：同一模型完成提取 + 写稿）。
+"""通用 LLM 与渲染层：两条产品线共用，**不含周报业务逻辑**。
 
-纯文本路径（DeepSeek 无多模态，图片描述来自评论者配图时写下的原话）；
-OpenAI 兼容 `chat/completions`，纯 stdlib 实现，无第三方依赖。
-`python -m scoring.pipeline` 的任何子命令都不会 import 本包。
+组成：
+    client       OpenAI 兼容 `chat/completions` 客户端（纯 stdlib，无第三方依赖；可注入 transport）
+    config        模型/端点/密钥配置（只读环境变量与仓库根 `.env`，密钥绝不硬编码）
+    md2html       md → 微信兼容 HTML（仓库内 vendored 转换器，bun 运行时）
+    inline_images 图片 base64 内联（微信手动粘贴专用）
 
-CLI 入口见 `src/llm/__main__.py`（check / selftest / assemble / generate / md2html）；
-离线自测见 `src/llm/selftest.py`。
+依赖方向：`modules/weekly` 与 `modules/ai4s` 都可以 import 本包；
+本包不 import 任何产品线（不 import crawler / scoring / writer / pubai4s）。
+周报写稿在 `modules/weekly/writer`（`python -m writer generate|assemble|…`）。
 """
+from __future__ import annotations
+
+__all__ = ["client", "config", "md2html", "inline_images"]

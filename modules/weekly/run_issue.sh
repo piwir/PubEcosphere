@@ -19,9 +19,9 @@
 #   BUN            bun 运行时覆盖（默认经 npx -y bun 启动，见 src/llm/md2html.py resolve_bun）
 #   MD2HTML_MAIN   转换器入口覆盖（默认仓库 src/vendor/md2html-cli/scripts/render.ts）
 #
-# 用法：ISSUE=1 ./run_issue.sh    或   DRY_RUN=1 ISSUE=1 ./run_issue.sh
+# 用法：ISSUE=1 bash modules/weekly/run_issue.sh    或   DRY_RUN=1 ISSUE=1 bash modules/weekly/run_issue.sh
 set -euo pipefail
-cd "$(dirname "$0")"   # 以仓库根为工作目录
+cd "$(dirname "$0")/../.."   # 以仓库根为工作目录（本脚本在 modules/weekly/ 下）
 
 ISSUE="${ISSUE:-1}"
 if [[ "$ISSUE" != "-1" ]] && ! [[ "$ISSUE" =~ ^[1-9][0-9]*$ ]]; then
@@ -98,7 +98,7 @@ python -m scoring.material --pub-dir "$OUT_ROOT/pub"
 #    WEEK_START 透传给 generate：头部 `数据收集：M.DD–M.DD` → 导语第一句
 export WEEK_START
 echo "==> [6/9] generate --assemble（提取+写稿+排版 → $WEEKLY/）"
-python -m llm generate --material-dir "$OUT_ROOT/pub" --weekly-dir "$WEEKLY" \
+python -m writer generate --material-dir "$OUT_ROOT/pub" --weekly-dir "$WEEKLY" \
     --issue "$ISSUE" --assemble
 
 # 6) md → 微信兼容 HTML（--keep-title 保留主标题 `# PubPeer 周报 · issue N`）
@@ -114,7 +114,7 @@ python -m llm md2html "$WEEKLY/$ISSUE.md" --theme default --keep-title
 #      c) 修复 blockquote 内被转换器剥成纯文本的 GitHub 链接（包回 <a href>）。
 #      b 不能用 CSS：页脚 blockquote 在 `**现状**` 段落后、无相邻选择器可命中，juice 不支持 :has()
 echo "==> [7.3/9] polish_html（上下标 + 页脚小字 + GitHub 链接修复）"
-python -m llm.polish_html "$WEEKLY/$ISSUE.html"
+python -m writer.polish_html "$WEEKLY/$ISSUE.html"
 
 # 7) 图片 base64 内联（微信手动粘贴专用；同时清掉转换器 data-local-path 绝对路径残留）
 echo "==> [8/9] inline_images（→ $WEEKLY/$ISSUE-base64.html）"

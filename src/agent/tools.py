@@ -165,7 +165,7 @@ def _material(args: dict) -> CmdSpec:
 
 def _generate(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
-    argv = [PY, "-m", "llm", "generate",
+    argv = [PY, "-m", "writer", "generate",
             "--material-dir", f"{_issue_dir(n)}/pub",
             "--weekly-dir", f"{_issue_dir(n)}/weekly",
             "--issue", n]
@@ -182,7 +182,7 @@ def _generate(args: dict) -> CmdSpec:
 
 def _assemble(args: dict) -> CmdSpec:
     n = _issue(args["issue"])
-    argv = [PY, "-m", "llm", "assemble",
+    argv = [PY, "-m", "writer", "assemble",
             "--material-dir", f"{_issue_dir(n)}/pub",
             "--weekly-dir", f"{_issue_dir(n)}/weekly",
             "--issue", n]
@@ -205,7 +205,7 @@ def _md2html(args: dict) -> CmdSpec:
 
 def _polish_html(args: dict) -> CmdSpec:
     html = _output_path(args["html_path"])
-    return CmdSpec([PY, "-m", "llm.polish_html", str(html)])
+    return CmdSpec([PY, "-m", "writer.polish_html", str(html)])
 
 
 def _inline_images(args: dict) -> CmdSpec:
@@ -220,7 +220,7 @@ def _run_issue(args: dict) -> CmdSpec:
         env["MIN_SCORE"] = str(float(args["min_score"]))
     if args.get("dry_run"):
         env["DRY_RUN"] = "1"
-    return CmdSpec(["bash", "run_issue.sh"], env=env)
+    return CmdSpec(["bash", "modules/weekly/run_issue.sh"], env=env)
 
 
 def _site_sync(args: dict) -> CmdSpec:
@@ -242,8 +242,8 @@ def _site_sync(args: dict) -> CmdSpec:
     return CmdSpec(argv)
 
 
-# ---- pubai4s（子模块推文流水线）--------------------------------------------
-# 写稿默认由 subagent 本体按 submodules/PubAI4S/docs/prompts/ 提示词完成（见
+# ---- pubai4s（推文流水线，modules/ai4s）-------------------------------------
+# 写稿默认由 subagent 本体按 modules/ai4s/prompts/ 提示词完成（见
 # src/agent/*.md）；这三个工具只覆盖确定性步骤与「走 API」全流程模式。
 
 def _pubai4s_out_dir(args: dict) -> list[str]:
@@ -461,8 +461,8 @@ TOOLS: dict[str, ToolDef] = {t.name: t for t in [
 # ---- 执行 ----------------------------------------------------------------
 
 _PREFLIGHT_CHECKS: list[tuple[list[str], str]] = [
-    ([PY, "-m", "llm", "check"], "提示词校验（两文件八节）"),
-    ([PY, "-m", "llm", "selftest"], "离线自测"),
+    ([PY, "-m", "writer", "check"], "提示词校验（两文件八节）"),
+    ([PY, "-m", "writer", "selftest"], "离线自测"),
     ([PY, "-m", "llm", "md2html", "--check"], "md2html 就绪（bun+render.ts+node_modules）"),
     ([PY, "-m", "scoring.pipeline", "status", "--json"], "status 只读可跑"),
 ]

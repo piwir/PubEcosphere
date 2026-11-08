@@ -18,8 +18,8 @@ from typing import Iterable, Optional
 from core.issue import IssueError, date_range_label
 
 from .assemble import assemble_weekly
-from .client import LLMClient
-from .config import LLMConfig
+from llm.client import LLMClient
+from llm.config import LLMConfig
 from .manifest import load_manifest, prepend_metadata
 from .prompts import load_prompt
 

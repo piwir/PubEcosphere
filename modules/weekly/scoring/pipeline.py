@@ -21,11 +21,10 @@ from crawler.client import ClientConfig, PubPeerClient
 from crawler.store import Store as CrawlerStore
 
 from core import db as core_db
-from core.time import iso_now as _iso_now  # 全仓统一时间口径（core.time）
 
 from . import config as config_mod
 from . import enrich, issue, report, revisit, score, status as status_mod
-from .cas import CasIndex, minor_name, minor_names
+from .cas import CasIndex, minor_name
 from .ccf import CcfIndex
 from .jcr import JcrIndex
 from .signals import extract_comment_signals
@@ -326,7 +325,16 @@ def cmd_rank(args) -> int:
     cas_idx, jcr_idx, ccf_idx = _build_indexes(args)
     sstore = ScoringStore(args.db, create=True)   # rank 要写 scores/shortlist
     cstore = CrawlerStore(args.db)
-    captures = sstore.all_captures()
+    try:
+        captures = sstore.all_captures()
+    except core_db.MissingTable as exc:
+        # 空库/未取数：不能静默「rank 成功 0 篇」（agent 会误判成已打分），直接失败
+        print(f"rank: {exc}", file=sys.stderr)
+        return 1
+    if not captures:
+        print("rank: captures 表是空的（还没取数）。先跑 "
+              f"`python -m crawler.crawl --db {args.db} capture`，再重试。", file=sys.stderr)
+        return 1
     if not args.include_published:
         pub_ids = sstore.published_ids()
         if pub_ids:
@@ -470,7 +478,8 @@ def cmd_pick(args) -> int:
     sstore = ScoringStore(args.db, create=True)   # pick 要写 published
     run_id = args.run_id or sstore.latest_run_id()
     if not run_id:
-        print("no run found — 先运行 rank", file=sys.stderr)
+        print("pick: 该库里没有打分记录（run）。先跑 `python -m scoring.pipeline rank --db "
+              f"{args.db} --issue {args.issue}`，再重试。", file=sys.stderr)
         return 1
 
     if args.dry_run:

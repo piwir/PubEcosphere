@@ -128,10 +128,10 @@ def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
     # 下一步推导（generate --assemble 同时产生 drafted + assembled，两者一起判）
     # next_cmd 是可直接复制执行的那条命令（agent 不必再去翻文档拼参数）。
     if not stages["ranked"]:
-        step, cmd = "rank（打分）", f"python -m scoring.pipeline rank --db {{db}} --issue {issue} --window-field captured_at"
+        step, cmd = "rank（打分）", f"python -m scoring.pipeline rank --db {db} --issue {issue} --window-field captured_at"
     elif not stages["picked"]:
         step, cmd = ("pick（选稿，先 dry-run 预览给人工批准）",
-                     f"python -m scoring.pipeline pick --db {{db}} --issue {issue} --min-score 0.50 --max-total 10 --dry-run")
+                     f"python -m scoring.pipeline pick --db {db} --issue {issue} --min-score 0.50 --max-total 10 --dry-run")
     elif not stages["materialized"]:
         step, cmd = ("material（图材合并，写回 pub/<pid>_files/）",
                      f"python -m scoring.material --pub-dir {issue_dir}/pub")
@@ -150,7 +150,7 @@ def _issue_status(issue_dir: Path, db: str, issue: str) -> dict:
         step, cmd = ("ready_to_publish（人工浏览器复制粘贴推送；发布后把链接填进 "
                      "site.json 的 issues[].wechatUrl 再跑 sitejson sync）",
                      f"python -m sitejson sync --issue {issue}")
-    next_step, next_cmd = step, cmd.replace("{db}", db) if "{db}" in cmd else cmd
+    next_step, next_cmd = step, cmd
 
     return {
         "issue": issue,

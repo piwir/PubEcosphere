@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 
 from core.names import matches_sleuth as _core_matches_sleuth
 from core.names import norm_name as _norm_name

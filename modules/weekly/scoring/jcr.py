@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import csv
-import html
 import re
 from pathlib import Path
 

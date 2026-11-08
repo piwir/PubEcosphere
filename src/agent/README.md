@@ -28,7 +28,7 @@
 
 > 客户端健康检查时 cwd=`/`、PATH 无 conda，`mcp.sh` 负责自切仓库根 + 解析 python；找不到 python 时加 `"env": {"PYTHON": "/path/to/python"}`。
 
-**Pi 客户端**（内置 MCP，无需第三方 adapter）：同一段配置放项目 `.pi/mcp.json` 或用户级 `~/.pi/agent/mcp.json`，首次需信任项目（`/trust`）。默认 17 工具全部走 `codemode`（模型用脚本调，工具名 `mcp__pubecosphere__<tool>`）；想少走一层脚本就给单个工具加 `"toolExposure": {"rank": "direct"}` 之类，直接声明为 `mcp__pubecosphere__rank`。
+**支持 MCP 的客户端**（无需第三方 adapter）：把同一段配置放进客户端的 MCP 配置文件，首次使用可能需要信任项目。17 个工具可用 `codemode` 形态暴露（模型用脚本调用，工具名 `mcp__pubecosphere__<tool>`）；想少走一层脚本就给单个工具加 `"toolExposure": {"rank": "direct"}` 之类，直接声明为 `mcp__pubecosphere__rank`。
 
 - 周报 14 工具：`status` / `preflight` / `capture` / `revisit` / `rank` / `pick` / `material` / `generate` / `assemble` / `md2html` / `polish_html` / `inline_images` / `run_issue` / `site_sync`。
   - `revisit` 支持 `window`（相对天）与 `window_dates`（绝对 ISO 日期，起含止不含）二选一；`rank` 默认按正整数期号自动推绝对窗口，可传 `window_dates` / `window_field` / `force_deep`。

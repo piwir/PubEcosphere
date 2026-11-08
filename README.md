@@ -8,6 +8,9 @@
   <a href="images/QR.png"><b>微信公众号</b></a>
 </p>
 
+> [!IMPORTANT]
+> **周报已暂停更新。** 本仓库代码、历史往期与站点归档仍保留，供查阅与复用。
+
 基于 PubPeer（pubpeer.com）公开评论，抓取存在**作者与打假人激烈交锋**的论文，多维度打分排序，由大模型生成周报；流水线提供 **MCP server** 与 **subagent 提示词**（`src/agent/`）。
 
 ## 项目简介
@@ -92,7 +95,7 @@ cp .env.example .env        # 填入 PUBECOSPHERE_LLM_API_KEY=sk-…
 }
 ```
 
-Pi 客户端直接用**内置 MCP**（无需第三方 adapter）：把上面这段放进项目 `.pi/mcp.json`（或用户级 `~/.pi/agent/mcp.json`），首次使用需信任项目（`/trust`）；可选 `exposure: "codemode"` + `toolExposure` 指定哪些工具直接暴露给模型。
+客户端支持 MCP 就直接用（无需第三方 adapter）：把上面这段放进客户端的 MCP 配置文件即可；部分客户端首次使用需信任项目，并可用 `toolExposure` 之类配置决定哪些工具直接暴露给模型。
 
 **Subagent 挂载**：把对应文件内容作为 subagent 的系统提示词加载，工作目录指向仓库根，授予 Bash / Read / Write / Edit / Glob / Grep 权限：
 

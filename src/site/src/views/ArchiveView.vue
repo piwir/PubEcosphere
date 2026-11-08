@@ -10,7 +10,7 @@ const pad = (n) => String(n).padStart(2, '0')
     <section class="archive">
       <p class="eyebrow">WEEKLY</p>
       <h1 class="page-title">往期周报</h1>
-      <p class="page-sub">每周三更新 · 共 {{ issues.length }} 期</p>
+      <p class="page-sub">已暂停更新 · 共 {{ issues.length }} 期</p>
 
       <div class="issue-row" v-for="it in issues" :key="it.issue">
         <span class="row-num"><small>NO.</small>{{ pad(it.issue) }}</span>
